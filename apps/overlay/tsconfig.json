@@ -16,5 +16,6 @@
       "@textreme/schema": ["../../packages/schema/src"],
       "@textreme/client": ["../../packages/client/src"]
     }
-  }
+  },
+  "include": ["./forge.env.d.ts", "./src/**/*"]
 }

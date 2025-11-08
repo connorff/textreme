@@ -3,7 +3,11 @@ import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
 import { DatabaseSync } from "node:sqlite";
+import { exec } from "child_process";
+import { promisify } from "util";
 import started from "electron-squirrel-startup";
+
+const execAsync = promisify(exec);
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -182,5 +186,88 @@ app.on("activate", () => {
   }
 });
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and import them here.
+// Helper function to escape AppleScript strings
+function escapeAppleScriptString(str: string): string {
+  // Replace backslashes first, then quotes
+  return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+// AppleScript execution handler
+ipcMain.handle(
+  "send-imessage",
+  async (_event, recipient: string, messageText: string) => {
+    try {
+      // Escape strings for AppleScript
+      const escapedRecipient = escapeAppleScriptString(recipient);
+      const escapedMessage = escapeAppleScriptString(messageText);
+
+      // Build AppleScript with proper escaping
+      // Use AppleScript's quoted form for safer string handling
+
+      const appleScript = `
+set recipient to "${escapedRecipient}"
+set messageText to "${escapedMessage}"
+
+set h to ""
+
+-- Try to find contact by name first
+try
+  tell application "Contacts"
+    set p to first person whose name is recipient
+    if (count of phones of p) > 0 then
+      set h to value of first phone of p
+    else if (count of emails of p) > 0 then
+      set h to value of first email of p
+    end if
+  end tell
+on error
+  -- If not found as contact name, assume recipient is already phone/email
+  set h to recipient
+end try
+
+if h is "" then
+  error "Recipient has no phone or email in Contacts."
+end if
+
+-- Open the Messages thread via URL scheme
+do shell script "open " & quoted form of ("imessage://" & h)
+
+-- Type and send message automatically
+delay 1
+tell application "System Events"
+  tell process "Messages"
+    keystroke messageText
+    delay 0.2
+    key code 36 -- press Return (sends the message)
+  end tell
+end tell
+`.trim();
+
+      // Execute using osascript via stdin using echo and pipe
+      // This avoids heredoc quoting issues
+      const command = `echo ${JSON.stringify(appleScript)} | osascript`;
+
+      const { stderr } = await execAsync(command);
+
+      if (
+        stderr &&
+        !stderr.includes("Messages") &&
+        !stderr.includes("execution error")
+      ) {
+        throw new Error(stderr);
+      }
+
+      return {
+        success: true,
+        message: "Message sent successfully!",
+      };
+    } catch (error) {
+      console.error("AppleScript error:", error);
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+);
