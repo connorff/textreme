@@ -1,0 +1,9 @@
+[project]
+name = "textreme-ml"
+version = "0.1.0"
+description = "ML components for Textreme"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "modal>=1.2.1",
+]
