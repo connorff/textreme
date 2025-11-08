@@ -10,7 +10,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   checkDatabaseAccess: () => ipcRenderer.invoke("check-database-access"),
   getDatabaseStats: () => ipcRenderer.invoke("get-database-stats"),
   getDatabaseTables: () => ipcRenderer.invoke("get-database-tables"),
-
+  
+  // Unread messages
+  getUnreadMessages: (limit?: number) => ipcRenderer.invoke("get-unread-messages", limit),
+  getUnreadConversations: () => ipcRenderer.invoke("get-unread-conversations"),
+  getConversationMessages: (chatId: string, limit?: number) => ipcRenderer.invoke("get-conversation-messages", chatId, limit),
+  
   // System
   openSystemPreferences: () => ipcRenderer.invoke("open-system-preferences"),
 

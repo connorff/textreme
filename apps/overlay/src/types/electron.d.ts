@@ -34,10 +34,85 @@ export interface SystemPreferencesResult {
   error?: string;
 }
 
+export interface UnreadMessage {
+  id: string;
+  guid: string;
+  text: string | null;
+  attributedBody: null;
+  date: number;
+  isFromMe: boolean;
+  handleId: string | null;
+  service: string | null;
+  cacheHasAttachments: boolean;
+  itemType: number;
+  isRead: boolean;
+  dateRead: number | null;
+  associatedMessageGuid: string | null;
+  associatedMessageType: number | null;
+  associatedMessageEmoji: string | null;
+  conversationId: string;
+  chatIdentifier: string;
+  displayName: string | null;
+  handleIdentifier: string | null;
+  contactName: string | null; // Resolved contact name from Contacts database
+}
+
+export interface UnreadMessagesResult {
+  success: boolean;
+  messages: UnreadMessage[];
+  count: number;
+  error?: string;
+}
+
+export interface UnreadConversation {
+  id: string;
+  guid: string;
+  chatIdentifier: string;
+  displayName: string | null;
+  style: number | null;
+  serviceName: string | null;
+  lastReadMessageTimestamp: number | null;
+  unreadCount: number;
+  lastActivity: number;
+  unreadMessages: UnreadMessage[];
+}
+
+export interface UnreadConversationsResult {
+  success: boolean;
+  conversations: UnreadConversation[];
+  totalUnread: number;
+  error?: string;
+}
+
+export interface ConversationMessage {
+  id: string;
+  text: string | null;
+  date: number;
+  isFromMe: boolean;
+  handleIdentifier: string | null;
+  contactName: string | null;
+  service: string | null;
+  cacheHasAttachments: boolean;
+  isRead: boolean;
+  dateRead: number | null;
+  associatedMessageGuid: string | null;
+  associatedMessageType: number | null;
+  associatedMessageEmoji: string | null;
+}
+
+export interface ConversationMessagesResult {
+  success: boolean;
+  messages: ConversationMessage[];
+  error?: string;
+}
+
 export interface ElectronAPI {
   checkDatabaseAccess: () => Promise<DatabaseAccessResult>;
   getDatabaseStats: () => Promise<DatabaseStats>;
   getDatabaseTables: () => Promise<DatabaseTablesResult>;
+  getUnreadMessages: (limit?: number) => Promise<UnreadMessagesResult>;
+  getUnreadConversations: () => Promise<UnreadConversationsResult>;
+  getConversationMessages: (chatId: string, limit?: number) => Promise<ConversationMessagesResult>;
   openSystemPreferences: () => Promise<SystemPreferencesResult>;
 }
 
