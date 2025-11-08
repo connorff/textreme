@@ -4,6 +4,7 @@ import {
   ipcMain,
   shell,
   systemPreferences,
+  screen,
 } from "electron";
 import path from "path";
 import { DatabaseSync } from "node:sqlite";
@@ -32,11 +33,27 @@ let contactMap: Map<string, string> | null = null;
 let contactMapLoading = false;
 
 const createWindow = (): void => {
+  // Get screen dimensions
+  const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+  
+  const windowWidth = 600;
+  const windowHeight = 200;
+  const bottomMargin = 5; // Distance from bottom of screen
+  
+  // Calculate position: centered horizontally, at bottom vertically
+  const x = Math.floor((screenWidth - windowWidth) / 2);
+  const y = screenHeight - windowHeight - bottomMargin;
+  
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 512,
-    height: 320, // 16:10 aspect ratio (512 * 10/16)
+    width: windowWidth,
+    height: windowHeight,
+    x: x,
+    y: y,
     frame: false,
+    transparent: true, // Remove backdrop shadow
+    hasShadow: false, // Remove window shadow on macOS
+    backgroundColor: '#00000000', // Fully transparent background
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,

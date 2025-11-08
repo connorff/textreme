@@ -270,7 +270,7 @@ export const ConversationView = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-background">
+    <div className="flex flex-col h-screen w-screen bg-background rounded-xl overflow-hidden">
       {/* Top bar with icons and close button - draggable */}
       <div
         className="flex items-center justify-between p-3"
