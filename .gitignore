@@ -7,3 +7,4 @@ ml/.venv/
 
 memory/.venv/
 memory/my_memories/
+memory/.env
