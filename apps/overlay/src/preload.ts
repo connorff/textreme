@@ -12,14 +12,26 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getDatabaseTables: () => ipcRenderer.invoke("get-database-tables"),
   
   // Unread messages
-  getUnreadMessages: (limit?: number) => ipcRenderer.invoke("get-unread-messages", limit),
+  getUnreadMessages: (limit?: number) =>
+    ipcRenderer.invoke("get-unread-messages", limit),
   getUnreadConversations: () => ipcRenderer.invoke("get-unread-conversations"),
-  getConversationMessages: (chatId: string, limit?: number) => ipcRenderer.invoke("get-conversation-messages", chatId, limit),
+  getConversationMessages: (chatId: string, limit?: number) =>
+    ipcRenderer.invoke("get-conversation-messages", chatId, limit),
   
   // System
   openSystemPreferences: () => ipcRenderer.invoke("open-system-preferences"),
 
+  // Suggestions
+  generateSuggestions: (
+    chatGuid: string,
+    mode: "tab" | "agent",
+    draft?: string
+  ) => ipcRenderer.invoke("generate-suggestions", chatGuid, mode, draft),
+
   // iMessage
   sendIMessage: (recipient: string, messageText: string) =>
     ipcRenderer.invoke("send-imessage", recipient, messageText),
+
+  // Window control
+  closeWindow: () => ipcRenderer.send("close-window"),
 });

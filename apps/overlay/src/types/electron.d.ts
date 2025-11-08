@@ -106,14 +106,46 @@ export interface ConversationMessagesResult {
   error?: string;
 }
 
+export interface SuggestionRequest {
+  chatGuid: string;
+  mode: "tab" | "agent";
+  draft?: string;
+  lastMessages: ConversationMessage[];
+}
+
+export interface SuggestionResponse {
+  success: boolean;
+  suggestions: string[];
+  rationales?: string[];
+  error?: string;
+}
+
+export interface SendMessageResult {
+  success: boolean;
+  error?: string;
+}
+
 export interface ElectronAPI {
   checkDatabaseAccess: () => Promise<DatabaseAccessResult>;
   getDatabaseStats: () => Promise<DatabaseStats>;
   getDatabaseTables: () => Promise<DatabaseTablesResult>;
   getUnreadMessages: (limit?: number) => Promise<UnreadMessagesResult>;
   getUnreadConversations: () => Promise<UnreadConversationsResult>;
-  getConversationMessages: (chatId: string, limit?: number) => Promise<ConversationMessagesResult>;
+  getConversationMessages: (
+    chatId: string,
+    limit?: number
+  ) => Promise<ConversationMessagesResult>;
   openSystemPreferences: () => Promise<SystemPreferencesResult>;
+  generateSuggestions: (
+    chatGuid: string,
+    mode: "tab" | "agent",
+    draft?: string
+  ) => Promise<SuggestionResponse>;
+  sendIMessage: (
+    recipient: string,
+    messageText: string
+  ) => Promise<SendMessageResult>;
+  closeWindow: () => void;
 }
 
 declare global {
