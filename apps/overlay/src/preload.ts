@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Unread messages
   getUnreadMessages: (limit?: number) => ipcRenderer.invoke('get-unread-messages', limit),
   getUnreadConversations: () => ipcRenderer.invoke('get-unread-conversations'),
+  getConversationMessages: (chatId: string, limit?: number) => ipcRenderer.invoke('get-conversation-messages', chatId, limit),
   
   // System
   openSystemPreferences: () => ipcRenderer.invoke('open-system-preferences'),

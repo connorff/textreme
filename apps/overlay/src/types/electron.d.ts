@@ -84,12 +84,35 @@ export interface UnreadConversationsResult {
   error?: string;
 }
 
+export interface ConversationMessage {
+  id: string;
+  text: string | null;
+  date: number;
+  isFromMe: boolean;
+  handleIdentifier: string | null;
+  contactName: string | null;
+  service: string | null;
+  cacheHasAttachments: boolean;
+  isRead: boolean;
+  dateRead: number | null;
+  associatedMessageGuid: string | null;
+  associatedMessageType: number | null;
+  associatedMessageEmoji: string | null;
+}
+
+export interface ConversationMessagesResult {
+  success: boolean;
+  messages: ConversationMessage[];
+  error?: string;
+}
+
 export interface ElectronAPI {
   checkDatabaseAccess: () => Promise<DatabaseAccessResult>;
   getDatabaseStats: () => Promise<DatabaseStats>;
   getDatabaseTables: () => Promise<DatabaseTablesResult>;
   getUnreadMessages: (limit?: number) => Promise<UnreadMessagesResult>;
   getUnreadConversations: () => Promise<UnreadConversationsResult>;
+  getConversationMessages: (chatId: string, limit?: number) => Promise<ConversationMessagesResult>;
   openSystemPreferences: () => Promise<SystemPreferencesResult>;
 }
 

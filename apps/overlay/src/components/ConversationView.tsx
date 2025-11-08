@@ -1,12 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { appleTimestampToDate } from "@textreme/schema";
-import type { UnreadConversation, UnreadMessage } from "../types/electron";
+import type { UnreadConversation, ConversationMessage } from "../types/electron";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { MessageSquare, Paperclip } from "lucide-react";
+import { ChevronDown, ArrowUp } from "lucide-react";
 import { isPhoneIdentifier } from "@/lib/phone-utils";
 
 interface ConversationViewProps {
@@ -15,11 +14,13 @@ interface ConversationViewProps {
 
 export const ConversationView = ({ pollInterval = 2000 }: ConversationViewProps) => {
   const [conversations, setConversations] = useState<UnreadConversation[]>([]);
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  const [totalUnread, setTotalUnread] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [showConversationList, setShowConversationList] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const isInitialMount = useRef(true);
+  const [draftMessage, setDraftMessage] = useState("");
+  const [selectedRecommendation, setSelectedRecommendation] = useState<number | null>(null);
+  const [recentMessages, setRecentMessages] = useState<ConversationMessage[]>([]);
 
   const fetchUnreadMessages = useCallback(async () => {
     try {
@@ -27,14 +28,8 @@ export const ConversationView = ({ pollInterval = 2000 }: ConversationViewProps)
       const result = await window.electronAPI.getUnreadConversations();
       
       if (result.success) {
-        setConversations(result.conversations);
-        setTotalUnread(result.totalUnread);
-        
-        // Auto-select first conversation on initial mount
-        if (isInitialMount.current && result.conversations.length > 0) {
-          setSelectedConversationId(result.conversations[0].id);
-          isInitialMount.current = false;
-        }
+        // Limit to top 10 conversations
+        setConversations(result.conversations.slice(0, 10));
       } else {
         setError(result.error || "Failed to fetch unread messages");
       }
@@ -42,6 +37,21 @@ export const ConversationView = ({ pollInterval = 2000 }: ConversationViewProps)
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const fetchRecentMessages = useCallback(async (chatGuid: string) => {
+    try {
+      const result = await window.electronAPI.getConversationMessages(chatGuid, 5);
+      if (result.success) {
+        setRecentMessages(result.messages);
+      } else {
+        console.error("Failed to fetch recent messages:", result.error);
+        setRecentMessages([]);
+      }
+    } catch (err) {
+      console.error("Error fetching recent messages:", err);
+      setRecentMessages([]);
     }
   }, []);
 
@@ -59,70 +69,71 @@ export const ConversationView = ({ pollInterval = 2000 }: ConversationViewProps)
     return () => clearInterval(interval);
   }, [fetchUnreadMessages, pollInterval]);
 
-  const selectedConversation = conversations.find(c => c.id === selectedConversationId) || null;
+  // Fetch recent messages when conversation changes
+  useEffect(() => {
+    if (conversations.length > 0 && !showConversationList) {
+      const currentConversation = conversations[selectedIndex];
+      if (currentConversation) {
+        fetchRecentMessages(currentConversation.guid);
+      }
+    }
+  }, [selectedIndex, conversations, showConversationList, fetchRecentMessages]);
 
   const getDisplayName = (conversation: UnreadConversation): string => {
-    // Prefer display name
     if (conversation.displayName) {
       return conversation.displayName;
     }
-    // Try to get contact name from first message
     const firstMessage = conversation.unreadMessages[0];
     if (firstMessage?.contactName) {
       return firstMessage.contactName;
     }
-    // If chatIdentifier is a phone number and we don't have a contact name, don't show it
     if (isPhoneIdentifier(conversation.chatIdentifier)) {
       return "Unknown Contact";
     }
-    // For non-phone identifiers (like emails), show them
     return conversation.chatIdentifier || "Unknown";
   };
 
-  const getInitials = (name: string): string => {
-    const parts = name.split(" ");
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-    return name.substring(0, 2).toUpperCase();
+  const truncateText = (text: string | null, maxLength: number = 60): string => {
+    if (!text) return "[No text]";
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + "...";
   };
 
-  const formatTime = (timestamp: number): string => {
-    const date = appleTimestampToDate(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
+  const handleRecommendationClick = (index: number, text: string) => {
+    setSelectedRecommendation(index);
+    setDraftMessage(text);
   };
 
-  const formatMessageTime = (timestamp: number): string => {
-    const date = appleTimestampToDate(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const handleSelectConversation = (index: number) => {
+    setSelectedIndex(index);
+    setShowConversationList(false);
   };
+
+  const handleSendMessage = () => {
+    if (!draftMessage.trim()) return;
+    // TODO: Send message
+    console.log("Send:", draftMessage);
+    setDraftMessage("");
+    setSelectedRecommendation(null);
+  };
+
+  // Placeholder recommendations - will be replaced with ML model
+  const recommendations = ["Thanks!", "Sounds good", "Will do"];
 
   if (loading && conversations.length === 0) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-muted-foreground">Loading unread messages...</div>
+      <div className="flex items-center justify-center h-screen p-4">
+        <div className="text-sm text-muted-foreground">Loading...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex items-center justify-center h-screen p-4">
         <div className="text-center">
-          <div className="text-destructive mb-4">Error: {error}</div>
-          <Button onClick={fetchUnreadMessages}>
-            Retry
-          </Button>
+          <div className="text-sm text-destructive mb-2">Error: {error}</div>
+          <Button onClick={fetchUnreadMessages} size="sm">Retry</Button>
         </div>
       </div>
     );
@@ -130,194 +141,166 @@ export const ConversationView = ({ pollInterval = 2000 }: ConversationViewProps)
 
   if (conversations.length === 0) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex items-center justify-center h-screen p-4">
         <div className="text-center text-muted-foreground">
-          <div className="text-4xl mb-4">🎉</div>
-          <div className="text-lg">No unread messages!</div>
+          <div className="text-2xl mb-2">🎉</div>
+          <div className="text-sm">No unread messages</div>
         </div>
       </div>
     );
   }
 
-  // Sort messages by date (oldest first, like iMessage)
-  const sortedMessages = selectedConversation
-    ? [...selectedConversation.unreadMessages].sort((a, b) => a.date - b.date)
-    : [];
+  const currentConversation = conversations[selectedIndex];
 
-  return (
-    <div className="flex h-screen bg-background">
-      {/* Left Sidebar - Conversations List */}
-      <div className="w-80 border-r border-border bg-card flex flex-col">
+  // Show conversation list
+  if (showConversationList) {
+    return (
+      <div className="flex flex-col h-screen max-w-xl mx-auto bg-background">
         {/* Header */}
         <div className="p-4 border-b border-border">
-          <div className="flex items-center justify-between gap-2">
-            <h1 className="text-xl font-semibold">Unread Messages</h1>
-            <Badge variant={totalUnread > 0 ? "default" : "secondary"}>
-              {totalUnread}
-            </Badge>
-          </div>
+          <h2 className="text-sm font-medium text-muted-foreground">Select a conversation</h2>
         </div>
 
         {/* Conversations List */}
         <ScrollArea className="flex-1">
-          <div className="p-2 space-y-1">
-            {conversations.map((conversation) => {
+          <div className="p-2">
+            {conversations.map((conversation, index) => {
               const displayName = getDisplayName(conversation);
-              const isSelected = selectedConversationId === conversation.id;
               const lastMessage = conversation.unreadMessages[conversation.unreadMessages.length - 1];
               
               return (
                 <button
                   key={conversation.id}
-                  onClick={() => setSelectedConversationId(conversation.id)}
+                  onClick={() => handleSelectConversation(index)}
                   className={cn(
-                    "w-full text-left p-3 rounded-lg transition-colors overflow-hidden",
-                    "hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-                    isSelected && "bg-accent"
+                    "w-full p-3 rounded-lg text-left hover:bg-accent transition-colors mb-1",
+                    selectedIndex === index && "bg-accent"
                   )}
                 >
-                  <div className="flex items-start gap-3">
-                    <div className="relative shrink-0">
-                      <Avatar className="h-10 w-10">
-                        <AvatarFallback className="bg-primary/10 text-primary">
-                          {getInitials(displayName)}
-                        </AvatarFallback>
-                      </Avatar>
-                      {conversation.unreadCount > 0 && (
-                        <Badge 
-                          variant="default" 
-                          className="absolute -top-1 -right-1 h-5 min-w-5 px-1.5 flex items-center justify-center text-[10px] leading-none"
-                        >
-                          {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-medium truncate">{displayName}</span>
-                        {lastMessage && (
-                          <span className="text-xs text-muted-foreground whitespace-nowrap ml-auto">
-                            {formatTime(lastMessage.date)}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground line-clamp-2 break-all">
-                        {lastMessage?.text || "[No text content]"}
-                      </p>
-                    </div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-sm truncate">{displayName}</span>
+                    {conversation.unreadCount > 0 && (
+                      <Badge variant="default" className="h-5 px-1.5 text-xs ml-auto">
+                        {conversation.unreadCount}
+                      </Badge>
+                    )}
                   </div>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {truncateText(lastMessage?.text)}
+                  </p>
                 </button>
               );
             })}
           </div>
         </ScrollArea>
       </div>
+    );
+  }
 
-      {/* Right Pane - Messages */}
-      <div className="flex-1 flex flex-col bg-background">
-        {selectedConversation ? (
-          <>
-            {/* Message Header */}
-            <div className="border-b border-border p-4 bg-card">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10 shrink-0">
-                  <AvatarFallback className="bg-primary/10 text-primary">
-                    {getInitials(getDisplayName(selectedConversation))}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate">{getDisplayName(selectedConversation)}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {selectedConversation.unreadCount} unread message{selectedConversation.unreadCount !== 1 ? "s" : ""}
+  // Show single conversation
+  return (
+    <div className="flex flex-col h-screen max-w-xl mx-auto bg-background">
+      {/* Header with conversation name */}
+      <button
+        onClick={() => setShowConversationList(true)}
+        className="p-4 border-b border-border hover:bg-accent/50 transition-colors flex items-center justify-between"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span className="font-medium text-sm truncate">{getDisplayName(currentConversation)}</span>
+        </div>
+        {currentConversation.unreadCount > 0 && (
+          <Badge variant="default" className="h-5 px-1.5 text-xs ml-2 shrink-0">
+            {currentConversation.unreadCount}
+          </Badge>
+        )}
+      </button>
+
+      {/* Recommendations */}
+      <div className="p-4 border-b border-border bg-muted/20">
+        <div className="flex items-center gap-2 justify-center">
+          {recommendations.map((rec, index) => (
+            <Button
+              key={index}
+              variant={selectedRecommendation === index ? "default" : "outline"}
+              size="sm"
+              onClick={() => handleRecommendationClick(index, rec)}
+              className="flex-1 max-w-[180px] text-xs"
+            >
+              {rec}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      {/* Messages */}
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-3 min-h-full">
+          {recentMessages.length === 0 ? (
+            <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+              No messages to display
+            </div>
+          ) : (
+            recentMessages.map((message) => {
+              const isFromMe = message.isFromMe;
+              
+              // Skip reactions/tapbacks
+              if (message.associatedMessageGuid) {
+                return null;
+              }
+
+              return (
+                <div
+                  key={message.id}
+                  className={cn(
+                    "flex",
+                    isFromMe ? "justify-end" : "justify-start"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "max-w-[85%] rounded-2xl px-4 py-2.5",
+                      isFromMe
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-foreground"
+                    )}
+                  >
+                    <div className="text-sm break-words whitespace-pre-wrap">
+                      {message.text || "[No text]"}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              );
+            })
+          )}
+        </div>
+      </ScrollArea>
 
-            {/* Messages Area */}
-            <ScrollArea className="flex-1">
-              <div className="p-4 space-y-4">
-                {sortedMessages.map((message, index) => {
-                  const isFromMe = message.isFromMe;
-                  const showAvatar = !isFromMe;
-                  const prevMessage = index > 0 ? sortedMessages[index - 1] : null;
-                  const showTimeSeparator = 
-                    !prevMessage || 
-                    appleTimestampToDate(message.date).getTime() - appleTimestampToDate(prevMessage.date).getTime() > 300000; // 5 minutes
-
-                  // Handle reactions/tapbacks
-                  if (message.associatedMessageGuid) {
-                    const reactionEmoji = message.associatedMessageEmoji || "👍";
-                    return (
-                      <div key={message.id} className="flex items-center justify-center py-2">
-                        <div className="text-sm text-muted-foreground flex items-center gap-2">
-                          <span>{reactionEmoji}</span>
-                          <span>Reacted to a message</span>
-                          <span className="text-xs">{formatMessageTime(message.date)}</span>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div key={message.id}>
-                      {showTimeSeparator && (
-                        <div className="flex items-center justify-center py-3">
-                          <Badge variant="outline" className="text-xs">
-                            {formatTime(message.date)}
-                          </Badge>
-                        </div>
-                      )}
-                      <div className={cn(
-                        "flex items-end gap-2 mb-1",
-                        isFromMe ? "justify-end" : "justify-start"
-                      )}>
-                        {showAvatar && !isFromMe && (
-                          <Avatar className="h-8 w-8 shrink-0 mb-1">
-                            <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                              {message.contactName ? getInitials(message.contactName) : "?"}
-                            </AvatarFallback>
-                          </Avatar>
-                        )}
-                        {!showAvatar && <div className="w-8 shrink-0" />}
-                        <div className={cn(
-                          "max-w-[70%] rounded-2xl px-4 py-2.5 flex flex-col",
-                          isFromMe 
-                            ? "bg-primary text-primary-foreground" 
-                            : "bg-muted text-foreground"
-                        )}>
-                          <div className="text-sm whitespace-pre-wrap break-all">
-                            {message.text || "[No text content]"}
-                          </div>
-                          {message.cacheHasAttachments && (
-                            <div className="mt-1.5 flex items-center gap-1.5 text-xs opacity-70">
-                              <Paperclip className="h-3 w-3 shrink-0" />
-                              <span>Attachment</span>
-                            </div>
-                          )}
-                          <div className={cn(
-                            "text-xs mt-1.5 self-end",
-                            isFromMe ? "text-primary-foreground/70" : "text-muted-foreground"
-                          )}>
-                            {formatMessageTime(message.date)}
-                          </div>
-                        </div>
-                        {isFromMe && <div className="w-8 shrink-0" />}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </ScrollArea>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            <div className="text-center">
-              <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <div>Select a conversation to view messages</div>
-            </div>
-          </div>
-        )}
+      {/* Input Area */}
+      <div className="p-3 border-t border-border bg-card">
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={draftMessage}
+            onChange={(e) => setDraftMessage(e.target.value)}
+            placeholder="Type a message..."
+            className="flex-1 px-3 py-2 text-sm bg-background border border-border rounded-full focus:outline-none focus:ring-2 focus:ring-ring"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendMessage();
+              }
+            }}
+          />
+          <Button 
+            size="icon"
+            disabled={!draftMessage.trim()}
+            onClick={handleSendMessage}
+            className="rounded-full h-9 w-9 shrink-0"
+          >
+            <ArrowUp className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );
