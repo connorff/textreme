@@ -1,3 +1,4 @@
+import "./types.d.ts";
 import { createRoot } from "react-dom/client";
 import { useState } from "react";
 import { PermissionLoader } from "./components/PermissionLoader";

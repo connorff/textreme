@@ -17,5 +17,6 @@
       "@textreme/client": ["../../packages/client/src"],
       "@/*": ["./src/*"]
     }
-  }
+  },
+  "include": ["./forge.env.d.ts", "./src/**/*"]
 }
