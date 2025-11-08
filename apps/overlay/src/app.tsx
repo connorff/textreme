@@ -1,14 +1,19 @@
 import { createRoot } from "react-dom/client";
-import { MessageSchema } from "@textreme/schema";
+import { appleTimestampToDate, MessageSchema } from "@textreme/schema";
 
 const App = () => {
   const message = MessageSchema.parse({
     id: "1",
-    conversationId: "chat-123",
+    guid: "D8E8C79A-1234-5678-9ABC-DEF012345678",
     text: "Hello World!",
-    isFromSelf: true,
-    timestamp: Date.now(),
+    attributedBody: null,
+    date: 725713456509362176, // Apple epoch timestamp (nanoseconds since 2001-01-01)
+    isFromMe: true,
+    handleId: null,
     service: "iMessage",
+    cacheHasAttachments: false,
+    itemType: 0,
+    conversationId: "chat-123",
   });
 
   return (
@@ -21,9 +26,14 @@ const App = () => {
       </pre>
       
       <p style={{ color: "green" }}>✓ Schema validation passed!</p>
+      <p>Date: {message.date}</p>
+      <p>Readable Date: {appleTimestampToDate(message.date).toLocaleString()}</p>
     </div>
   );
 };
 
-const root = createRoot(document.body);
+const rootElement = document.getElementById("root");
+if (!rootElement) throw new Error("Root element not found");
+
+const root = createRoot(rootElement);
 root.render(<App />);

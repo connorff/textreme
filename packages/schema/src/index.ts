@@ -1,34 +1,97 @@
 import { z } from "zod";
 
 // core entities based on iMessage chat.db structure
-// message table: ROWID, guid, text, handle_id, is_from_me, date, service, cache_roomnames
-// chat table: ROWID, guid, chat_identifier, display_name
-// handle table: ROWID, id (phone/email)
+// complete schema based on actual database columns
+
+// message table columns:
+// ROWID, guid, text, attributedBody, date, is_from_me, handle_id, service,
+// cache_has_attachments, item_type, associated_message_guid, associated_message_type,
+// associated_message_emoji
 
 export const MessageSchema = z.object({
-  id: z.string(), // maps to ROWID or guid
-  conversationId: z.string(), // maps to chat ROWID or guid
-  text: z.string(), // message text
-  isFromSelf: z.boolean(), // maps to is_from_me
-  timestamp: z.number(), // maps to date (cocoa timestamp)
-  service: z.string().optional(), // iMessage, SMS, etc
-  handleId: z.string().optional(), // sender/recipient handle
+  // identifiers
+  id: z.string(), // ROWID as string
+  guid: z.string(), // global unique identifier
+
+  // content
+  text: z.string().nullable(), // plain text (can be null if only attributedBody)
+  attributedBody: z.any().nullable().optional(), // binary NSAttributedString for rich text (Buffer in Node, Uint8Array in browser)
+
+  // metadata
+  date: z.number(), // Apple epoch timestamp (nanoseconds since 2001-01-01)
+  isFromMe: z.boolean(), // true if sent by user, false if received
+  handleId: z.string().nullable(), // foreign key to handle table (sender/recipient)
+  service: z.string().nullable(), // "iMessage", "SMS", "RCS", etc
+
+  // attachments & special types
+  cacheHasAttachments: z.boolean().default(false), // true if message has media
+  itemType: z.number().default(0), // 0=regular message, others=special types
+
+  // reactions/replies (tapbacks)
+  associatedMessageGuid: z.string().nullable().optional(), // GUID of message being reacted to
+  associatedMessageType: z.number().nullable().optional(), // 2000-2006 for reaction types
+  associatedMessageEmoji: z.string().nullable().optional(), // emoji string for custom reactions
+
+  // computed/helper fields (not from DB)
+  conversationId: z.string().optional(), // chat ROWID for convenience
 });
 
+// chat table columns:
+// ROWID, guid, chat_identifier, display_name, style, service_name
+
 export const ConversationSchema = z.object({
-  id: z.string(), // chat ROWID or guid
-  chatIdentifier: z.string(), // phone/email/group id
-  displayName: z.string().optional(), // group chat name
-  participants: z.array(z.string()), // array of handle ids (phone/email)
+  // identifiers
+  id: z.string(), // chat ROWID
+  guid: z.string().optional(), // global unique identifier
+  chatIdentifier: z.string(), // phone number, email, or group ID
+
+  // metadata
+  displayName: z.string().nullable().optional(), // custom name for group chats
+  style: z.number().optional(), // 43=group chat, 45=one-on-one
+  serviceName: z.string().optional(), // "iMessage", "SMS", "RCS"
+
+  // computed fields
+  participants: z.array(z.string()).optional(), // array of handle identifiers
   lastActivity: z.number().optional(), // timestamp of last message
   messageCount: z.number().optional(),
   recentMessages: z.array(MessageSchema).optional(),
 });
 
+// handle table columns:
+// ROWID, id (phone/email), service
+
 export const HandleSchema = z.object({
-  id: z.string(), // ROWID
+  id: z.string(), // ROWID as string
   identifier: z.string(), // phone number or email
+  service: z.string(), // "iMessage", "SMS", "RCS"
 });
+
+// attachment table columns:
+// ROWID, filename, mime_type, transfer_name
+
+export const AttachmentSchema = z.object({
+  id: z.string(), // ROWID as string
+  filename: z.string().nullable(), // full path to media file
+  mimeType: z.string().nullable(), // "image/jpeg", "video/quicktime", etc
+  transferName: z.string().nullable(), // original filename
+});
+
+// reaction type constants (associated_message_type values)
+export const ReactionType = {
+  LOVE: 2000, // heart
+  LIKE: 2001, // thumbs up
+  DISLIKE: 2002, // thumbs down
+  LAUGH: 2003, // haha
+  EMPHASIZE: 2004, // exclamation marks
+  QUESTION: 2005, // question mark
+  CUSTOM_EMOJI: 2006, // custom emoji reaction
+} as const;
+
+// chat style constants
+export const ChatStyle = {
+  ONE_ON_ONE: 45,
+  GROUP: 43,
+} as const;
 
 // tab mode API - get suggestions while typing
 export const TabSuggestRequest = z.object({
@@ -75,8 +138,39 @@ export const AgentResponse = z.object({
 export type Message = z.infer<typeof MessageSchema>;
 export type Conversation = z.infer<typeof ConversationSchema>;
 export type Handle = z.infer<typeof HandleSchema>;
+export type Attachment = z.infer<typeof AttachmentSchema>;
 export type TabSuggestRequest = z.infer<typeof TabSuggestRequest>;
 export type TabSuggestResponse = z.infer<typeof TabSuggestResponse>;
 export type AgentRequest = z.infer<typeof AgentRequest>;
 export type AgentResponse = z.infer<typeof AgentResponse>;
+
+// helper type for reaction types
+export type ReactionTypeValue = (typeof ReactionType)[keyof typeof ReactionType];
+export type ChatStyleValue = (typeof ChatStyle)[keyof typeof ChatStyle];
+
+// utility functions for working with iMessage data
+
+/**
+ * Convert Apple epoch timestamp to JavaScript Date
+ * Apple uses nanoseconds since January 1, 2001, 00:00:00 UTC
+ * @param timestamp - Apple epoch timestamp in nanoseconds
+ * @returns JavaScript Date object
+ */
+export function appleTimestampToDate(timestamp: number): Date {
+  // Apple epoch starts at Jan 1, 2001
+  const appleEpoch = new Date("2001-01-01T00:00:00Z");
+  // Convert nanoseconds to milliseconds and add to epoch
+  return new Date(appleEpoch.getTime() + timestamp / 1000000);
+}
+
+/**
+ * Convert JavaScript Date to Apple epoch timestamp
+ * @param date - JavaScript Date object
+ * @returns Apple epoch timestamp in nanoseconds
+ */
+export function dateToAppleTimestamp(date: Date): number {
+  const appleEpoch = new Date("2001-01-01T00:00:00Z");
+  // Convert to nanoseconds
+  return (date.getTime() - appleEpoch.getTime()) * 1000000;
+}
 
