@@ -267,7 +267,9 @@ export const ConversationView = () => {
       conversation.unreadMessages[conversation.unreadMessages.length - 1];
     const text = lastMessage?.text || "[No text]";
     return text.length > 50 ? text.substring(0, 50) + "..." : text;
-  }  return (
+  };
+
+  return (
     <div className="flex flex-col h-screen w-screen bg-background">
       {/* Top bar with icons and close button - draggable */}
       <div
