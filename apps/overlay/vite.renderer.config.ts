@@ -11,7 +11,12 @@ export default defineConfig(async () => {
       alias: {
         '@textreme/schema': path.resolve(__dirname, '../../packages/schema/src'),
         '@textreme/client': path.resolve(__dirname, '../../packages/client/src'),
+        '@': path.resolve(__dirname, './src'),
       },
+      dedupe: ['react', 'react-dom'],
+    },
+    optimizeDeps: {
+      include: ['react', 'react-dom'],
     },
   };
 });

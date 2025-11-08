@@ -10,6 +10,8 @@ import { FuseV1Options, FuseVersion } from "@electron/fuses";
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    // Copy the contacts_dump binary to Resources (outside asar so it's executable)
+    extraResource: ["./contacts_dump"],
   },
   rebuildConfig: {},
   makers: [

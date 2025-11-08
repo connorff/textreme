@@ -14,7 +14,8 @@
     "jsx": "react-jsx",
     "paths": {
       "@textreme/schema": ["../../packages/schema/src"],
-      "@textreme/client": ["../../packages/client/src"]
+      "@textreme/client": ["../../packages/client/src"],
+      "@/*": ["./src/*"]
     }
   }
 }

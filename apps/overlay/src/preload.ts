@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDatabaseStats: () => ipcRenderer.invoke('get-database-stats'),
   getDatabaseTables: () => ipcRenderer.invoke('get-database-tables'),
   
+  // Unread messages
+  getUnreadMessages: (limit?: number) => ipcRenderer.invoke('get-unread-messages', limit),
+  getUnreadConversations: () => ipcRenderer.invoke('get-unread-conversations'),
+  
   // System
   openSystemPreferences: () => ipcRenderer.invoke('open-system-preferences'),
 });

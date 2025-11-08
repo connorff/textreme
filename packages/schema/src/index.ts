@@ -22,6 +22,8 @@ export const MessageSchema = z.object({
   isFromMe: z.boolean(), // true if sent by user, false if received
   handleId: z.string().nullable(), // foreign key to handle table (sender/recipient)
   service: z.string().nullable(), // "iMessage", "SMS", "RCS", etc
+  isRead: z.boolean().default(false), // true if message has been read
+  dateRead: z.number().nullable().optional(), // timestamp when message was read (Apple epoch)
 
   // attachments & special types
   cacheHasAttachments: z.boolean().default(false), // true if message has media
@@ -55,6 +57,8 @@ export const ConversationSchema = z.object({
   lastActivity: z.number().optional(), // timestamp of last message
   messageCount: z.number().optional(),
   recentMessages: z.array(MessageSchema).optional(),
+  unreadCount: z.number().optional(), // number of unread messages in this conversation
+  lastReadMessageTimestamp: z.number().nullable().optional(), // last read message timestamp for this chat
 });
 
 // handle table columns:
