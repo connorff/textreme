@@ -1,11 +1,141 @@
-import { app, BrowserWindow } from 'electron';
-import path from 'node:path';
-import started from 'electron-squirrel-startup';
+import { app, BrowserWindow, ipcMain, shell } from "electron";
+import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
+import { DatabaseSync } from "node:sqlite";
+import started from "electron-squirrel-startup";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
 }
+
+// ============================================================================
+// Database Access Handlers - Register BEFORE app ready
+// ============================================================================
+
+const CHAT_DB_PATH = path.join(os.homedir(), "Library", "Messages", "chat.db");
+
+/**
+ * Check if we have read access to the iMessage database
+ * Returns: { hasAccess: boolean, path: string, error?: string }
+ */
+ipcMain.handle("check-database-access", async () => {
+  try {
+    // Try to access the file
+    await fs.promises.access(CHAT_DB_PATH, fs.constants.R_OK);
+
+    // Get file stats to verify it's a real file
+    const stats = await fs.promises.stat(CHAT_DB_PATH);
+
+    return {
+      hasAccess: true,
+      path: CHAT_DB_PATH,
+      fileSize: stats.size,
+      lastModified: stats.mtime,
+    };
+  } catch (error: any) {
+    return {
+      hasAccess: false,
+      path: CHAT_DB_PATH,
+      error:
+        error.code === "EACCES"
+          ? "Permission denied. Please grant Full Disk Access in System Settings."
+          : error.code === "ENOENT"
+            ? "Database file not found. Is iMessage set up on this Mac?"
+            : error.message,
+    };
+  }
+});
+
+/**
+ * Get basic statistics about the database
+ * This will also trigger the permission prompt if not already granted
+ */
+ipcMain.handle("get-database-stats", async () => {
+  try {
+    const stats = await fs.promises.stat(CHAT_DB_PATH);
+    return {
+      success: true,
+      fileSize: stats.size,
+      fileSizeMB: (stats.size / (1024 * 1024)).toFixed(2),
+      lastModified: stats.mtime.toISOString(),
+      path: CHAT_DB_PATH,
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
+/**
+ * Get list of tables in the database
+ * This verifies we can actually query the database
+ */
+ipcMain.handle("get-database-tables", async () => {
+  let db: DatabaseSync | null = null;
+  try {
+    // Open database in read-only mode using Node's built-in SQLite
+    db = new DatabaseSync(CHAT_DB_PATH, { readOnly: true });
+
+    // Query for all tables
+    const stmt = db.prepare(`
+      SELECT name, type 
+      FROM sqlite_master 
+      WHERE type IN ('table', 'view')
+      ORDER BY name
+    `);
+
+    const tables = stmt.all() as Array<{ name: string; type: string }>;
+
+    // Get first 10 tables
+    const firstTenTables = tables.slice(0, 10);
+
+    // Log to console for verification
+    console.log("\n=== iMessage Database Tables (first 10) ===");
+    firstTenTables.forEach((table, index) => {
+      console.log(`${index + 1}. ${table.name} (${table.type})`);
+    });
+    console.log(`Total tables/views: ${tables.length}\n`);
+
+    return {
+      success: true,
+      tables: firstTenTables,
+      totalCount: tables.length,
+    };
+  } catch (error: any) {
+    console.error("Error querying database tables:", error);
+    return {
+      success: false,
+      error: error.message,
+      tables: [],
+      totalCount: 0,
+    };
+  } finally {
+    // Always close the database connection
+    if (db) {
+      db.close();
+    }
+  }
+});
+
+/**
+ * Open System Preferences to Security & Privacy > Full Disk Access
+ */
+ipcMain.handle("open-system-preferences", async () => {
+  try {
+    // Open the Security & Privacy pane
+    // On macOS Ventura+, this opens System Settings
+    await shell.openExternal(
+      "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+    );
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+});
 
 const createWindow = () => {
   // Create the browser window.
@@ -13,7 +143,7 @@ const createWindow = () => {
     width: 800,
     height: 600,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
     },
   });
 
@@ -22,7 +152,7 @@ const createWindow = () => {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
     mainWindow.loadFile(
-      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
+      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)
     );
   }
 
@@ -33,18 +163,18 @@ const createWindow = () => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
+app.on("ready", createWindow);
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
     app.quit();
   }
 });
 
-app.on('activate', () => {
+app.on("activate", () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {

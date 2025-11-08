@@ -1,7 +1,9 @@
 import { createRoot } from "react-dom/client";
+import { useState } from "react";
 import { appleTimestampToDate, MessageSchema } from "@textreme/schema";
+import { PermissionLoader } from "./components/PermissionLoader";
 
-const App = () => {
+const MainApp = () => {
   const message = MessageSchema.parse({
     id: "1",
     guid: "D8E8C79A-1234-5678-9ABC-DEF012345678",
@@ -19,6 +21,7 @@ const App = () => {
   return (
     <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
       <h1>Textreme Overlay</h1>
+      <p>✅ Database access granted!</p>
       <p>Electron + Vite + TypeScript + React</p>
 
       <pre style={{ background: "#f4f4f4", padding: "10px", borderRadius: "4px" }}>
@@ -30,6 +33,16 @@ const App = () => {
       <p>Readable Date: {appleTimestampToDate(message.date).toLocaleString()}</p>
     </div>
   );
+};
+
+const App = () => {
+  const [hasAccess, setHasAccess] = useState(false);
+
+  if (!hasAccess) {
+    return <PermissionLoader onAccessGranted={() => setHasAccess(true)} />;
+  }
+
+  return <MainApp />;
 };
 
 const rootElement = document.getElementById("root");
