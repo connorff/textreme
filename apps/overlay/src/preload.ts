@@ -22,11 +22,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openSystemPreferences: () => ipcRenderer.invoke("open-system-preferences"),
 
   // Suggestions
-  generateSuggestions: (
-    chatGuid: string,
-    mode: "tab" | "agent",
-    draft?: string
-  ) => ipcRenderer.invoke("generate-suggestions", chatGuid, mode, draft),
   generateCompletions: (
     messages: Array<{ text: string | null; isFromMe: boolean }>,
     draft: string

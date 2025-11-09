@@ -16,6 +16,9 @@ import { promisify } from "util";
 import { randomUUID } from "crypto";
 import { runAgentStream } from "../agent/run";
 import type { AgentContext } from "../agent";
+import { generateObject } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { z } from "zod";
 
 // Load .env file - dotenv/config loads from process.cwd() by default
 // Also try loading from apps/overlay/.env explicitly (doesn't error if file doesn't exist)
@@ -1592,21 +1595,16 @@ ipcMain.handle(
 );
 
 /**
- * Generate text completions using OpenAI with structured output
+ * Generate text completions using Vercel AI SDK with structured output
  */
 async function generateCompletionsWithAI(
   lastMessages: Array<{ text: string | null; isFromMe: boolean }>,
   draft: string
 ): Promise<string[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY environment variable is not set");
-  }
-
   // Build conversation context
   const contextLines = lastMessages
     .slice(-10) // Last 10 messages for context
-    .map((msg, idx) => {
+    .map((msg) => {
       const sender = msg.isFromMe ? "You" : "Them";
       const text = msg.text || "[No text]";
       return `${sender}: ${text}`;
@@ -1644,224 +1642,26 @@ ${context}
 
 User is typing: "${draft}"
 
-Generate 3 different ways to complete this message. Return ONLY the text that continues after "${draft}". Return as a JSON object with a "completions" array of strings.`;
+Generate 3 different ways to complete this message. Return ONLY the text that continues after "${draft}".`;
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 1.0,
+    console.log("Making request to OpenAI");
+    const { object } = await generateObject({
+      model: openai("gpt-5-nano"),
+      schema: z.object({
+        completions: z.array(z.string()).length(3),
       }),
+      system: systemPrompt,
+      prompt: userPrompt,
+      temperature: 1.0,
     });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        `OpenAI API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`
-      );
-    }
-
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content;
-
-    if (!content) {
-      throw new Error("No content in OpenAI response");
-    }
-
-    const parsed = JSON.parse(content);
-    const completions = parsed.completions || [];
-    
-    return completions.slice(0, 3);
+    return object.completions;
   } catch (error) {
-    console.error("OpenAI API error:", error);
+    console.error("AI SDK error:", error);
     throw error;
   }
 }
-
-/**
- * Generate text suggestions using OpenAI (legacy)
- */
-async function generateSuggestionsWithOpenAI(
-  lastMessages: Array<{ text: string | null; isFromMe: boolean }>,
-  mode: "tab" | "agent",
-  draft?: string
-): Promise<{ suggestions: string[]; rationales?: string[] }> {
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY environment variable not set");
-  }
-
-  // Truncate message context to avoid excessive tokens
-  const truncatedMessages = lastMessages
-    .filter((m) => m.text)
-    .slice(-5)
-    .map((m) => ({
-      role: m.isFromMe ? "assistant" : "user",
-      content: (m.text || "").substring(0, 200), // truncate each message
-    }));
-
-  let systemPrompt = "";
-  let userPrompt = "";
-
-  if (mode === "tab") {
-    systemPrompt = `You are a helpful SMS text message assistant. Generate 3 short, natural text message responses based on the conversation context. The responses should be casual, concise (1-2 sentences max), and contextually appropriate for SMS.`;
-
-    if (draft) {
-      userPrompt = `Based on the conversation and the user's draft message "${draft}", suggest 3 ways to complete or improve this message. Keep them short and natural for SMS.`;
-    } else {
-      userPrompt = `Suggest 3 natural, short responses to continue this conversation.`;
-    }
-  } else {
-    // agent mode
-    systemPrompt = `You are an expert SMS conversation assistant. Analyze the conversation and generate 3 distinct response options with different tones/approaches. For each option, also provide a brief 1-sentence rationale explaining the tone or strategy.`;
-
-    if (draft) {
-      userPrompt = `The user wants to say: "${draft}". Provide 3 different ways to express this sentiment, each with a different tone or approach. Format your response as JSON: {"options": ["text1", "text2", "text3"], "rationales": ["rationale1", "rationale2", "rationale3"]}`;
-    } else {
-      userPrompt = `Provide 3 response options with different tones/strategies. Format as JSON: {"options": ["text1", "text2", "text3"], "rationales": ["rationale1", "rationale2", "rationale3"]}`;
-    }
-  }
-
-  const messages = [
-    { role: "system", content: systemPrompt },
-    ...truncatedMessages,
-    { role: "user", content: userPrompt },
-  ];
-
-  try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: messages,
-        temperature: 0.8,
-        max_tokens: 300,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        `OpenAI API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`
-      );
-    }
-
-    const data = await response.json();
-    const content = data.choices[0]?.message?.content;
-
-    if (!content) {
-      throw new Error("No content in OpenAI response");
-    }
-
-    if (mode === "agent") {
-      // Parse JSON response
-      try {
-        const parsed = JSON.parse(content);
-        return {
-          suggestions: parsed.options || [],
-          rationales: parsed.rationales || [],
-        };
-      } catch (e) {
-        // Fallback: split by newlines
-        const lines = content
-          .trim()
-          .split("\n")
-          .filter((l: string) => l.trim());
-        return {
-          suggestions: lines.slice(0, 3),
-          rationales: lines.slice(0, 3).map(() => "Response option"),
-        };
-      }
-    } else {
-      // tab mode: split by newlines or numbered list
-      const lines = content
-        .trim()
-        .split("\n")
-        .map((l: string) => l.replace(/^\d+[\.)]\s*/, "").trim())
-        .filter((l: string) => l.length > 0);
-
-      return {
-        suggestions: lines.slice(0, 3),
-      };
-    }
-  } catch (error) {
-    console.error("OpenAI API error:", error);
-    throw error;
-  }
-}
-
-// IPC handler for generating suggestions
-ipcMain.handle(
-  "generate-suggestions",
-  async (_event, chatGuid: string, mode: "tab" | "agent", draft?: string) => {
-    let db: DatabaseSync | null = null;
-    try {
-      // Fetch recent messages for context
-      db = new DatabaseSync(CHAT_DB_PATH, { readOnly: true });
-
-      const messagesStmt = db.prepare(`
-        SELECT 
-          m.text,
-          m.attributedBody,
-          m.is_from_me
-        FROM message m
-        INNER JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
-        INNER JOIN chat c ON cmj.chat_id = c.ROWID
-        WHERE c.guid = ?
-        ORDER BY m.date DESC
-        LIMIT 5
-      `);
-
-      const messageRows = messagesStmt.all(chatGuid) as Array<{
-        text: string | null;
-        attributedBody: Buffer | null;
-        is_from_me: number;
-      }>;
-
-      const messages = messageRows
-        .map((msg) => ({
-          text: extractMessageText(msg.text, msg.attributedBody),
-          isFromMe: msg.is_from_me === 1,
-        }))
-        .reverse(); // chronological order
-
-      // Call OpenAI
-      const result = await generateSuggestionsWithOpenAI(messages, mode, draft);
-
-      return {
-        success: true,
-        suggestions: result.suggestions,
-        rationales: result.rationales,
-      };
-    } catch (error: any) {
-      console.error("Error generating suggestions:", error);
-      return {
-        success: false,
-        suggestions: [],
-        error: error.message || "Failed to generate suggestions",
-      };
-    } finally {
-      if (db) {
-        db.close();
-      }
-    }
-  }
-);
 
 // IPC handler for generating autocomplete suggestions with messages from UI
 ipcMain.handle(

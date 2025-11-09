@@ -188,11 +188,6 @@ export interface ElectronAPI {
     limit?: number
   ) => Promise<ConversationMessagesResult>;
   openSystemPreferences: () => Promise<SystemPreferencesResult>;
-  generateSuggestions: (
-    chatGuid: string,
-    mode: "tab" | "agent",
-    draft?: string
-  ) => Promise<SuggestionResponse>;
   generateCompletions: (
     messages: Array<{ text: string | null; isFromMe: boolean }>,
     draft: string
