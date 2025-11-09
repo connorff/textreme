@@ -73,10 +73,10 @@ export const useMessages = (
   useEffect(() => {
     if (messages.length === 0) return;
     if (shouldScrollOnNextUpdate) {
-      requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
         scrollToBottom(true); // instant scroll on initial conversation open
         setShouldScrollOnNextUpdate(false);
-      });
+    });
     }
   }, [messages, shouldScrollOnNextUpdate, scrollToBottom]);
 

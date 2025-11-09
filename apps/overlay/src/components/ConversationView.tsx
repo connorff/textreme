@@ -92,12 +92,49 @@ export const ConversationView = () => {
     window.electronAPI.closeWindow();
   };
 
-  const handleSuggestionClick = (suggestion: string) => {
-    // Append the completion to the draft
-    // Add a space before if draft doesn't end with one
-    const needsSpace = draft && !draft.endsWith(" ");
-    setDraft(draft + (needsSpace ? " " : "") + suggestion);
-    inputRef.current?.focus();
+  const handleSuggestionClick = async (suggestion: string) => {
+    // Check if this is a conjugate suggestion (multiple messages)
+    if (suggestion.includes("|||")) {
+      // Conjugate suggestion - send all messages in sequence
+      const messages = suggestion.split("|||").map(msg => msg.trim()).filter(msg => msg);
+      
+      if (!focusedConversation || messages.length === 0) {
+        return;
+      }
+
+      // Send each message with a small delay between them
+      for (let i = 0; i < messages.length; i++) {
+        const result = await sendMessage(focusedConversation, messages[i]);
+        if (!result.success) {
+          console.error(`Failed to send message ${i + 1}:`, result.error);
+          // TODO: Show error to user
+          break; // Stop sending if one fails
+        }
+        
+        // Small delay between messages to ensure they arrive in order
+        if (i < messages.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+
+      // Clear draft and refresh messages after all are sent
+      setDraft("");
+      scrollToBottom(true);
+      setTimeout(() => {
+        if (focusedConversation) {
+          fetchMessages(focusedConversation.guid);
+        }
+      }, 1000);
+    } else {
+      // Regular suggestion - populate draft
+      if (!draft.trim()) {
+        setDraft(suggestion);
+      } else {
+        const needsSpace = draft && !draft.endsWith(" ");
+        setDraft(draft + (needsSpace ? " " : "") + suggestion);
+      }
+      inputRef.current?.focus();
+    }
   };
 
   const handleConversationSelect = (

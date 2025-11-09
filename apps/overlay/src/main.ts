@@ -777,26 +777,29 @@ function normalizePhoneNumber(phone: string): string {
 function findAddressBookDbs(): string[] {
   const pattern = path.join(
     os.homedir(),
-    'Library/Application Support/AddressBook/Sources/*/AddressBook-v22.abcddb'
+    "Library/Application Support/AddressBook/Sources/*/AddressBook-v22.abcddb"
   );
-  
+
   // Use glob pattern matching
   const matches: string[] = [];
   try {
-    const sourcesDir = path.join(os.homedir(), 'Library/Application Support/AddressBook/Sources');
+    const sourcesDir = path.join(
+      os.homedir(),
+      "Library/Application Support/AddressBook/Sources"
+    );
     if (fs.existsSync(sourcesDir)) {
       const sources = fs.readdirSync(sourcesDir);
       for (const source of sources) {
-        const dbPath = path.join(sourcesDir, source, 'AddressBook-v22.abcddb');
+        const dbPath = path.join(sourcesDir, source, "AddressBook-v22.abcddb");
         if (fs.existsSync(dbPath)) {
           matches.push(dbPath);
         }
       }
     }
   } catch (error) {
-    console.error('Error finding AddressBook databases:', error);
+    console.error("Error finding AddressBook databases:", error);
   }
-  
+
   return matches;
 }
 
@@ -819,79 +822,83 @@ async function loadContactMap(): Promise<Map<string, string>> {
 
   try {
     const addressbookPaths = findAddressBookDbs();
-    
+
     if (addressbookPaths.length === 0) {
       contactMap = new Map();
       contactMapLoading = false;
       return contactMap;
     }
-    
+
     const map = new Map<string, string>();
-    
+
     // Use Node's built-in sqlite module (requires Node 22.5.0+)
-    const { DatabaseSync } = require('node:sqlite');
-    
+    const { DatabaseSync } = require("node:sqlite");
+
     for (const dbPath of addressbookPaths) {
       try {
         // Query the AddressBook database (same as orchestrate.py get_contact_name)
         const db = new DatabaseSync(dbPath, { open: true, readOnly: true });
-        
-        const rows = db.prepare(`
+
+        const rows = db
+          .prepare(
+            `
           SELECT c.ZFIRSTNAME, c.ZLASTNAME, p.ZFULLNUMBER
           FROM ZABCDPHONENUMBER p
           JOIN ZABCDRECORD c ON p.ZOWNER = c.Z_PK
-        `).all();
-        
+        `
+          )
+          .all();
+
         db.close();
-        
+
         // Process each contact-phone pair (same as orchestrate.py)
         for (const row of rows) {
-          const firstName = row.ZFIRSTNAME || '';
-          const lastName = row.ZLASTNAME || '';
+          const firstName = row.ZFIRSTNAME || "";
+          const lastName = row.ZLASTNAME || "";
           const fullName = `${firstName} ${lastName}`.trim();
           const phoneRaw = row.ZFULLNUMBER;
-          
+
           if (!fullName || !phoneRaw) continue;
-          
+
           const normalized = normalizePhoneNumber(phoneRaw);
-          
+
           // Store many different format variations to maximize matching (same as orchestrate.py)
           const variants = new Set<string>();
-          
+
           // Add the normalized version
           variants.add(normalized);
-          
+
           // Add without leading +
           if (normalized.startsWith("+")) {
             variants.add(normalized.slice(1));
           }
-          
+
           // Add without +1 prefix
           if (normalized.startsWith("+1")) {
             variants.add(normalized.slice(2));
           }
-          
+
           // Add without 1 prefix
           if (normalized.startsWith("1") && normalized.length === 11) {
             variants.add(normalized.slice(1));
           }
-          
+
           // Add last 10 digits (US phone number)
           if (normalized.length >= 10) {
             variants.add(normalized.slice(-10));
           }
-          
+
           // Add last 7 digits (local number)
           if (normalized.length >= 7) {
             variants.add(normalized.slice(-7));
           }
-          
+
           // Add with +1 prefix if not present and looks like US number
           if (!normalized.startsWith("+") && normalized.length === 10) {
             variants.add("+1" + normalized);
             variants.add("1" + normalized);
           }
-          
+
           // Store all variants
           for (const variant of variants) {
             if (variant.length >= 7) {
@@ -900,12 +907,11 @@ async function loadContactMap(): Promise<Map<string, string>> {
             }
           }
         }
-        
       } catch (error) {
         console.error(`Error querying AddressBook database:`, error);
       }
     }
-    
+
     contactMap = map;
     contactMapLoading = false;
     return map;
@@ -1538,7 +1544,7 @@ async function generateCompletionsWithModal(
 ): Promise<string[]> {
   // Ensure contact map is loaded before lookup (same as orchestrate.py does)
   await loadContactMap();
-  
+
   // Resolve contact name using the same method as orchestrate.py
   // Priority: displayName from DB -> lookupContactName(chatIdentifier) -> chatIdentifier itself
   let contactName = displayName;
@@ -1603,30 +1609,28 @@ async function generateCompletionsWithModal(
   });
 
   try {
-    
     // Make three parallel requests with different temperatures
     const requests = TEMPERATURES.map(async (temperature) => {
       const params = new URLSearchParams({
         temperature: temperature.toString(),
         sender: "ME",
         input: input,
+        partial_response: partialResponse,
       });
 
-      if (partialResponse) {
-        params.append('partial_response', partialResponse);
-      }
-
       const url = `${MODAL_ENDPOINT}?${params.toString()}`;
-      
+
       const response = await fetch(url, {
-        method: 'GET',
+        method: "GET",
         headers: {
-          'Accept': 'text/plain',
+          Accept: "text/plain",
         },
       });
 
       if (!response.ok) {
-        throw new Error(`Modal API returned ${response.status}: ${response.statusText}`);
+        throw new Error(
+          `Modal API returned ${response.status}: ${response.statusText}`
+        );
       }
 
       const text = await response.text();
@@ -1711,7 +1715,12 @@ ipcMain.handle(
     chatIdentifier: string
   ) => {
     try {
-      const completions = await generateCompletionsWithModal(messages, draft, displayName, chatIdentifier);
+      const completions = await generateCompletionsWithModal(
+        messages,
+        draft,
+        displayName,
+        chatIdentifier
+      );
 
       return {
         success: true,

@@ -13,6 +13,17 @@ interface ChatInputProps {
 
 // Helper to format the full preview text
 const formatSuggestionPreview = (draft: string, completion: string): string => {
+  // Check if this is a conjugate suggestion (multiple messages)
+  if (completion.includes("|||")) {
+    // For conjugates, just return as-is (we'll format them specially in the render)
+    return completion;
+  }
+
+  // If draft is empty, just show the suggestion as-is (full message)
+  if (!draft.trim()) {
+    return completion;
+  }
+  // Otherwise, append completion to draft
   const needsSpace = draft && !draft.endsWith(" ");
   return draft + (needsSpace ? " " : "") + completion;
 };
@@ -79,6 +90,11 @@ export const ChatInput = ({
         <div className="space-y-0.5">
           {suggestions.map((suggestion, idx) => {
             const fullPreview = formatSuggestionPreview(draft, suggestion);
+            const isConjugate = fullPreview.includes("|||");
+            const messages = isConjugate
+              ? fullPreview.split("|||")
+              : [fullPreview];
+
             return (
               <div
                 key={idx}
@@ -99,7 +115,20 @@ export const ChatInput = ({
                   lineHeight: "20px",
                 }}
               >
-                {fullPreview}
+                {isConjugate ? (
+                  <div className="flex flex-col gap-0.5">
+                    {messages.map((msg, msgIdx) => (
+                      <div key={msgIdx} className="flex items-center gap-1">
+                        <span className="text-xs opacity-50">
+                          {msgIdx + 1}.
+                        </span>
+                        <span>{msg}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  fullPreview
+                )}
               </div>
             );
           })}
