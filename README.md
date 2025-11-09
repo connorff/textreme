@@ -2,9 +2,23 @@
 
 AI-powered iMessage response generation using fine-tuned models and agentic workflows.
 
-## Product Demo 
+## Video Demo 
 
-TODO(emily): add here
+Link: https://screen.studio/share/72wVyGXE?state=uploading
+
+### Product
+
+Startup Page
+![Startup Page](apps/overlay/src/assets/startup_page.png)
+
+Inbox View
+![Inbox View](apps/overlay/src/assets/agent_mode.png)
+
+Tab Mode
+![Tab Mode](apps/overlay/src/assets/tab_mode.png)
+
+Agent Mode
+![Agent Mode](apps/overlay/src/assets/agent_mode.png)
 
 ### Keyboard Shortcuts
 
