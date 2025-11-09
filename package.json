@@ -8,7 +8,8 @@
     "dev": "pnpm --filter overlay dev",
     "build": "pnpm --filter overlay build",
     "lint": "eslint . --ext ts,tsx",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "smoke:cli": "node scripts/smoke-cli.js"
   },
   "keywords": [],
   "author": "",
