@@ -6,7 +6,9 @@ interface UnreadMessagesProps {
   pollInterval?: number; // milliseconds between polls, default 2000ms
 }
 
-export const UnreadMessages = ({ pollInterval = 2000 }: UnreadMessagesProps) => {
+export const UnreadMessages = ({
+  pollInterval = 2000,
+}: UnreadMessagesProps) => {
   const [conversations, setConversations] = useState<UnreadConversation[]>([]);
   const [totalUnread, setTotalUnread] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -17,19 +19,19 @@ export const UnreadMessages = ({ pollInterval = 2000 }: UnreadMessagesProps) => 
     try {
       setError(null);
       const result = await window.electronAPI.getUnreadConversations();
-      
+
       if (result.success) {
         // Filter out group chats (identifiers starting with "chat")
         const filteredConversations = result.conversations.filter(
           (conv) => !conv.chatIdentifier?.startsWith("chat")
         );
-        
+
         // Recalculate total unread count based on filtered conversations
         const filteredTotalUnread = filteredConversations.reduce(
           (sum, conv) => sum + (conv.unreadCount || 0),
           0
         );
-        
+
         setConversations(filteredConversations);
         setTotalUnread(filteredTotalUnread);
         setLastPollTime(new Date());
@@ -85,7 +87,10 @@ export const UnreadMessages = ({ pollInterval = 2000 }: UnreadMessagesProps) => 
     return conversation.chatIdentifier || "Unknown";
   };
 
-  const truncateText = (text: string | null, maxLength: number = 100): string => {
+  const truncateText = (
+    text: string | null,
+    maxLength: number = 100
+  ): string => {
     if (!text) return "[No text content]";
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + "...";
@@ -94,7 +99,9 @@ export const UnreadMessages = ({ pollInterval = 2000 }: UnreadMessagesProps) => 
   if (loading && conversations.length === 0) {
     return (
       <div style={{ padding: "20px", textAlign: "center" }}>
-        <div style={{ fontSize: "14px", color: "#666" }}>Loading unread messages...</div>
+        <div style={{ fontSize: "14px", color: "#666" }}>
+          Loading unread messages...
+        </div>
       </div>
     );
   }
@@ -122,9 +129,23 @@ export const UnreadMessages = ({ pollInterval = 2000 }: UnreadMessagesProps) => 
   }
 
   return (
-    <div style={{ padding: "20px", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
-      <div style={{ marginBottom: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ margin: 0, fontSize: "24px", fontWeight: 600 }}>Unread Messages</h1>
+    <div
+      style={{
+        padding: "20px",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      }}
+    >
+      <div
+        style={{
+          marginBottom: "20px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <h1 style={{ margin: 0, fontSize: "24px", fontWeight: 600 }}>
+          Unread Messages
+        </h1>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <div
             style={{
@@ -164,9 +185,22 @@ export const UnreadMessages = ({ pollInterval = 2000 }: UnreadMessagesProps) => 
                 boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", marginBottom: "12px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "start",
+                  marginBottom: "12px",
+                }}
+              >
                 <div>
-                  <div style={{ fontSize: "16px", fontWeight: 600, marginBottom: "4px" }}>
+                  <div
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 600,
+                      marginBottom: "4px",
+                    }}
+                  >
                     {getDisplayName(conversation)}
                   </div>
                   <div style={{ fontSize: "12px", color: "#666" }}>
@@ -174,12 +208,20 @@ export const UnreadMessages = ({ pollInterval = 2000 }: UnreadMessagesProps) => 
                       const firstMessage = conversation.unreadMessages[0];
                       const contactName = firstMessage?.contactName;
                       const identifier = conversation.chatIdentifier;
-                      
+
                       // Show contact name if different from display name, or show identifier
-                      if (contactName && contactName !== getDisplayName(conversation)) {
+                      if (
+                        contactName &&
+                        contactName !== getDisplayName(conversation)
+                      ) {
                         return `${contactName} • ${identifier}`;
                       }
-                      return identifier + (conversation.serviceName ? ` • ${conversation.serviceName}` : "");
+                      return (
+                        identifier +
+                        (conversation.serviceName
+                          ? ` • ${conversation.serviceName}`
+                          : "")
+                      );
                     })()}
                   </div>
                 </div>
@@ -197,13 +239,29 @@ export const UnreadMessages = ({ pollInterval = 2000 }: UnreadMessagesProps) => 
                 </div>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+              >
                 {conversation.unreadMessages.slice(0, 3).map((message) => (
-                  <MessageItem key={message.id} message={message} formatTime={formatTime} truncateText={truncateText} />
+                  <MessageItem
+                    key={message.id}
+                    message={message}
+                    formatTime={formatTime}
+                    truncateText={truncateText}
+                  />
                 ))}
                 {conversation.unreadMessages.length > 3 && (
-                  <div style={{ fontSize: "12px", color: "#666", fontStyle: "italic", marginTop: "4px" }}>
-                    +{conversation.unreadMessages.length - 3} more unread message{conversation.unreadMessages.length - 3 !== 1 ? "s" : ""}
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      color: "#666",
+                      fontStyle: "italic",
+                      marginTop: "4px",
+                    }}
+                  >
+                    +{conversation.unreadMessages.length - 3} more unread
+                    message
+                    {conversation.unreadMessages.length - 3 !== 1 ? "s" : ""}
                   </div>
                 )}
               </div>
@@ -221,14 +279,20 @@ interface MessageItemProps {
   truncateText: (text: string | null, maxLength?: number) => string;
 }
 
-const MessageItem = ({ message, formatTime, truncateText }: MessageItemProps) => {
+const MessageItem = ({
+  message,
+  formatTime,
+  truncateText,
+}: MessageItemProps) => {
   // Handle reactions/tapbacks
   if (message.associatedMessageGuid) {
     const reactionEmoji = message.associatedMessageEmoji || "👍";
     return (
       <div style={{ fontSize: "14px", color: "#666", fontStyle: "italic" }}>
         {reactionEmoji} Reacted to a message
-        <span style={{ marginLeft: "8px", fontSize: "12px" }}>{formatTime(message.date)}</span>
+        <span style={{ marginLeft: "8px", fontSize: "12px" }}>
+          {formatTime(message.date)}
+        </span>
       </div>
     );
   }
@@ -243,16 +307,23 @@ const MessageItem = ({ message, formatTime, truncateText }: MessageItemProps) =>
       }}
     >
       <div style={{ marginBottom: "4px" }}>{truncateText(message.text)}</div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
         <div style={{ fontSize: "12px", color: "#666" }}>
-          {message.contactName 
+          {message.contactName
             ? `From: ${message.contactName}${message.handleIdentifier && message.handleIdentifier !== message.contactName ? ` (${message.handleIdentifier})` : ""}`
             : message.handleIdentifier && `From: ${message.handleIdentifier}`}
           {message.cacheHasAttachments && " 📎"}
         </div>
-        <div style={{ fontSize: "12px", color: "#999" }}>{formatTime(message.date)}</div>
+        <div style={{ fontSize: "12px", color: "#999" }}>
+          {formatTime(message.date)}
+        </div>
       </div>
     </div>
   );
 };
-

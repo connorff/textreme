@@ -69,7 +69,7 @@ const createWindow = (): void => {
     y: y,
     frame: false,
     transparent: true, // Remove backdrop shadow
-    hasShadow: false, // Remove window shadow on macOS
+    hasShadow: true, // Enable window shadow on macOS
     backgroundColor: "#00000000", // Fully transparent background
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -1732,17 +1732,12 @@ if h is "" then
   error "Recipient has no phone or email in Contacts."
 end if
 
--- Open the Messages thread via URL scheme
-do shell script "open " & quoted form of ("imessage://" & h)
-
--- Type and send message automatically
-delay 1
-tell application "System Events"
-  tell process "Messages"
-    keystroke messageText
-    delay 0.2
-    key code 36 -- press Return (sends the message)
-  end tell
+-- Send message without activating/showing the Messages app
+tell application "Messages"
+  -- Don't activate the app (no 'activate' command)
+  set targetService to 1st service whose service type = iMessage
+  set targetBuddy to buddy h of targetService
+  send messageText to targetBuddy
 end tell
 `.trim();
 

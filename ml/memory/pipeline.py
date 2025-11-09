@@ -2,11 +2,39 @@
 """
 Memory Pipeline - Create memory summaries for contacts from iMessage chat.db
 
-This pipeline:
-1. Finds top 20 conversations from last 6 months ordered by # of messages
+This pipeline has two modes:
+
+SNAPSHOT MODE (new, default, parallelized with checkpointing):
+1. Finds top 10 conversations from last 6 months ordered by # of messages
+2. For each week in the last 6 months, creates a "snapshot" that looks back 6 months from that week
+3. Each snapshot contains:
+   - Week-by-week summaries for the 6-month lookback period
+   - Overall prose summary of those 6 months
+   - Metadata about the contact (texting style, etc.)
+4. Parallelization: Two-level (3 contacts × 8 snapshots = 24 threads by default)
+5. Multi-key support: Automatically uses multiple API keys with failover
+6. Checkpointing: Saves progress after each contact, auto-resumes if interrupted
+7. Output: Single JSON file with weekly snapshots for all contacts
+
+LEGACY MODE:
+1. Finds top N conversations from last 6 months ordered by # of messages
 2. Chunks messages by week and generates monthly highlights
 3. Stores context of last 6 months per contact
 4. Extracts important moments, milestones, and relationship insights
+5. Output: Directory with individual JSON files per contact
+
+Usage:
+  # Snapshot mode (default) - with checkpointing
+  python pipeline.py --mode snapshot --top 10 --output snapshots.json
+  
+  # If interrupted, just re-run - automatically resumes!
+  python pipeline.py --mode snapshot --top 10 --output snapshots.json
+  
+  # Start fresh (ignore checkpoint)
+  python pipeline.py --mode snapshot --top 10 --no-resume
+  
+  # Legacy mode
+  python pipeline.py --mode legacy --top 20 --output ./memory_output
 """
 
 import sqlite3
@@ -1204,6 +1232,445 @@ Return ONLY the JSON object, no other text."""
             traceback.print_exc()
             return None
     
+    def get_week_boundaries(self, months_back: int = 6) -> List[Dict[str, datetime]]:
+        """
+        Get week boundaries for the last N months.
+        Returns list of dicts with 'week_start', 'week_end', and 'week_label'
+        """
+        today = datetime.now()
+        cutoff_date = today - timedelta(days=months_back * 30)
+        
+        weeks = []
+        current_date = cutoff_date
+        
+        # Start from the first Monday on or after cutoff_date
+        days_until_monday = (7 - current_date.weekday()) % 7
+        if days_until_monday > 0:
+            current_date += timedelta(days=days_until_monday)
+        elif current_date.weekday() != 0:
+            current_date += timedelta(days=(7 - current_date.weekday()))
+        
+        while current_date <= today:
+            week_start = current_date
+            week_end = current_date + timedelta(days=6)
+            
+            # Don't extend past today
+            if week_end > today:
+                week_end = today
+            
+            weeks.append({
+                'week_start': week_start,
+                'week_end': week_end,
+                'week_label': week_start.strftime("%Y-W%W")
+            })
+            
+            current_date += timedelta(days=7)
+        
+        return weeks
+    
+    def get_messages_in_range(self, handle_id: str, start_date: datetime, end_date: datetime) -> List[Message]:
+        """Get messages for a contact within a specific date range"""
+        start_timestamp = int((start_date - datetime(2001, 1, 1)).total_seconds() * 1e9)
+        end_timestamp = int((end_date - datetime(2001, 1, 1)).total_seconds() * 1e9)
+        
+        conn = sqlite3.connect(self.db.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        query = """
+        SELECT 
+            m.text,
+            m.attributedBody,
+            m.is_from_me,
+            m.date,
+            h.id as handle_id
+        FROM message m
+        INNER JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+        INNER JOIN chat c ON cmj.chat_id = c.ROWID
+        INNER JOIN handle h ON m.handle_id = h.ROWID
+        WHERE h.id = ? 
+            AND m.date >= ?
+            AND m.date <= ?
+            AND m.item_type = 0
+            AND m.cache_has_attachments = 0
+            AND m.is_finished = 1
+            AND m.is_system_message = 0
+            AND m.associated_message_guid IS NULL
+            AND c.style = 45
+        ORDER BY m.date ASC
+        """
+        
+        cursor.execute(query, (handle_id, start_timestamp, end_timestamp))
+        rows = cursor.fetchall()
+        
+        messages = []
+        for row in rows:
+            message_text = self.db._extract_message_text(row['text'], row['attributedBody'])
+            
+            if (message_text 
+                and not self.db._contains_url(message_text)
+                and not self.db._is_low_value_message(message_text)):
+                timestamp = datetime(2001, 1, 1) + timedelta(seconds=row['date'] / 1e9)
+                messages.append(Message(
+                    text=message_text,
+                    is_from_me=bool(row['is_from_me']),
+                    timestamp=timestamp,
+                    handle_id=row['handle_id']
+                ))
+        
+        conn.close()
+        return messages
+    
+    def generate_weekly_snapshot(self, handle_id: str, week_end: datetime) -> Dict[str, Any]:
+        """
+        Generate a snapshot for a specific week's end date.
+        Looks back 6 months from week_end and generates week-by-week summaries plus overall summary.
+        """
+        lookback_start = week_end - timedelta(days=6 * 30)  # 6 months back
+        
+        # Get messages in the 6-month window
+        messages = self.get_messages_in_range(handle_id, lookback_start, week_end)
+        
+        if not messages:
+            return {
+                "lookback_range": {
+                    "start": lookback_start.strftime("%Y-%m-%d"),
+                    "end": week_end.strftime("%Y-%m-%d")
+                },
+                "message_count": 0,
+                "weekly_summaries": [],
+                "overall_summary": "No messages in this period"
+            }
+        
+        # Chunk messages by week
+        weekly_chunks = self.chunk_messages_by_week(messages)
+        
+        # Generate summary for each week
+        weekly_summaries = []
+        for week_key in sorted(weekly_chunks.keys()):
+            summary = self.summarize_week(week_key, weekly_chunks[week_key])
+            weekly_summaries.append(summary)
+        
+        # Generate overall summary for the 6-month period
+        overall_summary = self.generate_overall_summary(messages, lookback_start, week_end)
+        
+        return {
+            "lookback_range": {
+                "start": lookback_start.strftime("%Y-%m-%d"),
+                "end": week_end.strftime("%Y-%m-%d")
+            },
+            "message_count": len(messages),
+            "weekly_summaries": weekly_summaries,
+            "overall_summary": overall_summary
+        }
+    
+    def generate_overall_summary(self, messages: List[Message], start_date: datetime, end_date: datetime) -> str:
+        """Generate an overall prose summary for a period of messages"""
+        if not messages:
+            return "No messages in this period"
+        
+        # Sample messages throughout the period
+        sample_size = min(300, len(messages))
+        step = max(1, len(messages) // sample_size)
+        sampled = messages[::step]
+        
+        formatted_messages = []
+        for msg in sampled:
+            sender = "Me" if msg.is_from_me else "Them"
+            date = msg.timestamp.strftime("%Y-%m-%d")
+            formatted_messages.append(f"[{date}] {sender}: {msg.text}")
+        
+        conversation_text = "\n".join(formatted_messages)
+        
+        prompt = f"""Analyze this 6-month conversation period and create a comprehensive, flowing prose summary.
+
+This should be a memory narrative that captures:
+- The overall relationship dynamic and how it evolved
+- Key moments, milestones, and important events with specific details
+- Important people, places, companies, and events mentioned
+- Patterns in communication and relationship changes
+- Concrete plans made and outcomes
+- Any significant life changes or decisions
+
+Write in a natural, prose style (not bullet points). Be specific with names, dates, places, and outcomes.
+
+Period: {start_date.strftime('%B %d, %Y')} to {end_date.strftime('%B %d, %Y')}
+Total messages: {len(messages)}
+
+Sample conversation:
+{conversation_text}
+
+Write a comprehensive memory summary in prose form (2-4 paragraphs)."""
+        
+        def make_api_call(client):
+            return client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that creates natural, flowing prose summaries of conversations. Focus on concrete details and write in a narrative style."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+        
+        try:
+            response = self.key_manager.call_with_retry(make_api_call)
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"Error generating overall summary: {e}")
+            return f"Error generating summary for {start_date.date()} to {end_date.date()}"
+    
+    def _process_single_snapshot(self, handle_id: str, phone_number: str, week_info: Dict[str, datetime]) -> tuple[str, Dict[str, Any]]:
+        """Process a single weekly snapshot (for parallel execution)"""
+        week_start = week_info['week_start']
+        week_end = week_info['week_end']
+        week_start_str = week_start.strftime("%Y-%m-%d")
+        
+        snapshot = self.generate_weekly_snapshot(handle_id, week_end)
+        
+        return (week_start_str, {
+            "snapshot_date": week_end.strftime("%Y-%m-%d"),
+            **snapshot
+        })
+    
+    def process_contact_snapshots(self, contact: Dict[str, Any], max_workers: int = 8) -> Dict[str, Any]:
+        """Process a contact with the new snapshot-based approach (parallelized)"""
+        handle_id = contact['handle_id']
+        phone_number = contact.get('phone_number', handle_id)
+        
+        print(f"[{phone_number}] Processing weekly snapshots in parallel...", flush=True)
+        
+        # Get week boundaries for last 6 months
+        weeks = self.get_week_boundaries(months_back=6)
+        
+        # Get metadata about the contact (texting style from all messages)
+        all_messages = self.db.get_messages_for_contact(handle_id, months=6)
+        texting_style = self.analyze_texting_style(all_messages) if all_messages else None
+        
+        # Process each week IN PARALLEL
+        weekly_snapshots = {}
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all weekly snapshot tasks
+            future_to_week = {
+                executor.submit(self._process_single_snapshot, handle_id, phone_number, week_info): week_info
+                for week_info in weeks
+            }
+            
+            # Collect results with progress bar
+            with tqdm(total=len(weeks), desc=f"📅 {phone_number}", leave=False) as pbar:
+                for future in as_completed(future_to_week):
+                    try:
+                        week_start_str, snapshot_data = future.result()
+                        weekly_snapshots[week_start_str] = snapshot_data
+                        pbar.update(1)
+                    except Exception as e:
+                        week_info = future_to_week[future]
+                        week_start_str = week_info['week_start'].strftime("%Y-%m-%d")
+                        print(f"\n❌ [{phone_number}] Error processing week {week_start_str}: {e}")
+                        pbar.update(1)
+        
+        result = {
+            "contact_id": handle_id,
+            "contact_name": phone_number,
+            "phone_number": phone_number,
+            "metadata": {
+                "total_messages_last_6_months": len(all_messages),
+                "texting_style": asdict(texting_style) if texting_style else None,
+                "generated_at": datetime.now().isoformat()
+            },
+            "weekly_snapshots": weekly_snapshots
+        }
+        
+        print(f"[{phone_number}] Complete! ({len(weekly_snapshots)} snapshots)", flush=True)
+        return result
+    
+    def _load_checkpoint(self, checkpoint_file: Path) -> Dict[str, Any]:
+        """Load checkpoint data from file"""
+        if checkpoint_file.exists():
+            try:
+                with open(checkpoint_file, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"⚠️  Warning: Could not load checkpoint: {e}")
+        return {"completed_contacts": {}, "results": []}
+    
+    def _save_checkpoint(self, checkpoint_file: Path, completed_contacts: Dict[str, Any], results: List[Dict[str, Any]]):
+        """Save checkpoint data to file"""
+        try:
+            checkpoint_data = {
+                "completed_contacts": completed_contacts,
+                "results": results,
+                "last_updated": datetime.now().isoformat()
+            }
+            with open(checkpoint_file, 'w') as f:
+                json.dump(checkpoint_data, f, indent=2)
+        except Exception as e:
+            print(f"⚠️  Warning: Could not save checkpoint: {e}")
+    
+    def _process_contact_wrapper(self, contact: Dict[str, Any], contact_num: int, total: int, 
+                                 max_snapshot_workers: int = 8, checkpoint_file: Optional[Path] = None,
+                                 checkpoint_lock: Optional[threading.Lock] = None) -> Optional[Dict[str, Any]]:
+        """Wrapper for processing a single contact (for parallel execution)"""
+        phone_number = contact.get('phone_number', contact['handle_id'])
+        
+        try:
+            print(f"\n{'='*70}")
+            print(f"[{contact_num}/{total}] Processing {phone_number}")
+            print(f"{'='*70}")
+            
+            result = self.process_contact_snapshots(contact, max_workers=max_snapshot_workers)
+            
+            # Save checkpoint after successful processing
+            if checkpoint_file and checkpoint_lock and result:
+                with checkpoint_lock:
+                    checkpoint = self._load_checkpoint(checkpoint_file)
+                    checkpoint["completed_contacts"][phone_number] = True
+                    checkpoint["results"].append(result)
+                    self._save_checkpoint(checkpoint_file, 
+                                        checkpoint["completed_contacts"], 
+                                        checkpoint["results"])
+                    print(f"💾 Checkpoint saved for {phone_number}")
+            
+            return result
+        except Exception as e:
+            print(f"\n❌ Error processing {phone_number}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def run_snapshot_pipeline(self, output_file: str = "./memory_snapshots.json", top_n: int = 10, 
+                             max_contact_workers: int = 3, max_snapshot_workers: int = 8,
+                             resume: bool = True):
+        """
+        Run the new snapshot-based pipeline with maximum parallelization and checkpointing
+        
+        Args:
+            output_file: Path to output JSON file
+            top_n: Number of top contacts to process
+            max_contact_workers: Number of contacts to process in parallel (default: 3)
+            max_snapshot_workers: Number of weekly snapshots to process in parallel per contact (default: 8)
+            resume: If True, resume from checkpoint if exists (default: True)
+        
+        Total parallel API calls = max_contact_workers * max_snapshot_workers (e.g., 3 * 8 = 24 threads)
+        
+        Checkpointing: Saves progress after each contact. If interrupted, run again with resume=True
+        to skip already-completed contacts.
+        """
+        print("\n" + "="*70)
+        print("🚀 SNAPSHOT MEMORY PIPELINE - Starting".center(70))
+        print("="*70)
+        print(f"📁 Output: {output_file}")
+        print(f"🎯 Target: Top {top_n} contacts")
+        print(f"⚡ Parallelization: {max_contact_workers} contacts × {max_snapshot_workers} snapshots/contact")
+        print(f"🔑 API Keys: {len(self.key_manager.api_keys)}")
+        
+        # Setup checkpoint file
+        output_path = Path(output_file)
+        checkpoint_file = output_path.parent / f"{output_path.stem}_checkpoint.json"
+        
+        # Load checkpoint if resuming
+        checkpoint = {"completed_contacts": {}, "results": []}
+        if resume and checkpoint_file.exists():
+            checkpoint = self._load_checkpoint(checkpoint_file)
+            completed_count = len(checkpoint["completed_contacts"])
+            if completed_count > 0:
+                print(f"📂 Resuming from checkpoint: {completed_count} contacts already completed")
+        else:
+            print(f"💾 Checkpointing enabled: {checkpoint_file}")
+        
+        # Get top contacts
+        print(f"\n🔍 Finding top {top_n} contacts from last 6 months...")
+        all_contacts = self.db.get_top_contacts(limit=top_n, months=6)
+        
+        # Filter out already-completed contacts if resuming
+        contacts_to_process = []
+        skipped = 0
+        for contact in all_contacts:
+            phone_number = contact.get('phone_number', contact['handle_id'])
+            if resume and phone_number in checkpoint["completed_contacts"]:
+                skipped += 1
+                continue
+            contacts_to_process.append(contact)
+        
+        if skipped > 0:
+            print(f"⏭️  Skipping {skipped} already-completed contacts")
+        print(f"✅ Found {len(contacts_to_process)} contacts to process")
+        
+        if len(contacts_to_process) == 0:
+            print("\n🎉 All contacts already processed! Using checkpoint results.")
+            all_results = checkpoint["results"]
+        else:
+            # Process contacts IN PARALLEL
+            print(f"\n{'='*70}")
+            print(f"⚡ Processing {len(contacts_to_process)} contacts in parallel...")
+            print(f"{'='*70}\n")
+            
+            new_results = []
+            pbar_lock = threading.Lock()
+            checkpoint_lock = threading.Lock()
+            
+            with tqdm(total=len(contacts_to_process), desc="📱 Overall Progress", 
+                     bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]',
+                     ncols=80) as pbar:
+                
+                with ThreadPoolExecutor(max_workers=max_contact_workers) as executor:
+                    # Submit all contact tasks
+                    future_to_contact = {
+                        executor.submit(
+                            self._process_contact_wrapper,
+                            contact,
+                            i,
+                            len(contacts_to_process),
+                            max_snapshot_workers,
+                            checkpoint_file,
+                            checkpoint_lock
+                        ): contact
+                        for i, contact in enumerate(contacts_to_process, 1)
+                    }
+                    
+                    # Collect results as they complete
+                    for future in as_completed(future_to_contact):
+                        result = future.result()
+                        if result:
+                            new_results.append(result)
+                        
+                        with pbar_lock:
+                            pbar.update(1)
+            
+            # Combine checkpoint results with new results
+            all_results = checkpoint["results"] + new_results
+        
+        # Save final results
+        print(f"\n{'='*70}")
+        print("💾 Saving final results...")
+        
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_path, 'w') as f:
+            json.dump(all_results, f, indent=2)
+        
+        print(f"✅ Results saved to {output_file}")
+        
+        # Clean up checkpoint file on successful completion
+        if checkpoint_file.exists() and len(all_results) >= len(all_contacts):
+            try:
+                checkpoint_file.unlink()
+                print(f"🗑️  Checkpoint file removed (pipeline completed)")
+            except Exception as e:
+                print(f"⚠️  Could not remove checkpoint file: {e}")
+        
+        # Final summary
+        print(f"\n{'='*70}")
+        print("✨ PIPELINE COMPLETE!".center(70))
+        print("="*70)
+        print(f"✅ Successfully processed: {len(all_results)}/{len(all_contacts)} contacts")
+        if skipped > 0:
+            print(f"⏭️  Skipped (from checkpoint): {skipped} contacts")
+            print(f"🆕 Newly processed: {len(all_results) - len(checkpoint['results'])} contacts")
+        print(f"📄 Output file: {output_file}")
+        print("="*70 + "\n")
+    
     def run(self, output_dir: str = "./memory_output", top_n: int = 20, max_workers: int = 10):
         """Run the full pipeline with parallel processing"""
         print("\n" + "="*70)
@@ -1288,9 +1755,19 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description="Memory Pipeline for iMessage contacts")
-    parser.add_argument("--output", "-o", default="./memory_output", help="Output directory")
-    parser.add_argument("--top", "-n", type=int, default=20, help="Number of top contacts to process")
-    parser.add_argument("--workers", "-w", type=int, default=10, help="Number of parallel workers (default: 10)")
+    parser.add_argument("--mode", "-m", choices=["snapshot", "legacy"], default="snapshot",
+                       help="Pipeline mode: 'snapshot' for new weekly snapshot format, 'legacy' for old format")
+    parser.add_argument("--output", "-o", default=None, 
+                       help="Output path (file for snapshot mode, directory for legacy mode)")
+    parser.add_argument("--top", "-n", type=int, default=10, help="Number of top contacts to process")
+    parser.add_argument("--workers", "-w", type=int, default=10, 
+                       help="Number of parallel workers (legacy mode only, default: 10)")
+    parser.add_argument("--contact-workers", type=int, default=3,
+                       help="Snapshot mode: Number of contacts to process in parallel (default: 3)")
+    parser.add_argument("--snapshot-workers", type=int, default=8,
+                       help="Snapshot mode: Number of weekly snapshots per contact in parallel (default: 8)")
+    parser.add_argument("--no-resume", action="store_true",
+                       help="Snapshot mode: Start fresh, ignore checkpoint (default: resume from checkpoint)")
     parser.add_argument("--api-key", help="OpenAI API key (or set OPENAI_API_KEY env var)")
     parser.add_argument("--db-path", help="Path to chat.db (default: ~/Library/Messages/chat.db)")
     
@@ -1303,7 +1780,28 @@ def main():
             api_keys = [args.api_key]
         
         pipeline = MemoryPipeline(api_keys=api_keys)
-        pipeline.run(output_dir=args.output, top_n=args.top, max_workers=args.workers)
+        
+        if args.mode == "snapshot":
+            # New snapshot-based pipeline with parallelization and checkpointing
+            output_file = args.output or "./memory_snapshots.json"
+            print(f"⚡ Total parallelization: {args.contact_workers} × {args.snapshot_workers} = {args.contact_workers * args.snapshot_workers} concurrent threads")
+            print(f"🔑 Using {len(pipeline.key_manager.api_keys)} API key(s) with automatic failover")
+            if not args.no_resume:
+                print(f"💾 Checkpointing enabled: will resume if interrupted\n")
+            else:
+                print(f"🔄 Starting fresh (ignoring any checkpoint)\n")
+            
+            pipeline.run_snapshot_pipeline(
+                output_file=output_file, 
+                top_n=args.top,
+                max_contact_workers=args.contact_workers,
+                max_snapshot_workers=args.snapshot_workers,
+                resume=not args.no_resume
+            )
+        else:
+            # Legacy pipeline
+            output_dir = args.output or "./memory_output"
+            pipeline.run(output_dir=output_dir, top_n=args.top, max_workers=args.workers)
     except Exception as e:
         print(f"Error: {e}")
         import traceback
