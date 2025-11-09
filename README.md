@@ -2,6 +2,17 @@
 
 AI-powered iMessage response generation using fine-tuned models and agentic workflows.
 
+## Product Demo 
+
+TODO(emily): add here
+
+### Keyboard Shortcuts
+
+- **`Cmd + I`** - Navigate from start page to unread messages inbox view
+- **`Enter`** - Select a conversation and enter tab mode
+- **`Cmd + P`** - Switch between tab and agent modes
+- **`Esc`** - Return to start page from tab or agent mode
+
 ## Project Structure
 
 `pnpm=9.15.4` other versions might not work
