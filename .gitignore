@@ -7,3 +7,8 @@ ml/.venv/
 
 .env
 my_memories
+
+ml/data/config.json
+ml/data/dataset.jsonl
+
+__pycache__/

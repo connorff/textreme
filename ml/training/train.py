@@ -28,7 +28,7 @@ def train(run_folder: str, output_dir: str):
     print(f"Starting training run in {run_folder}.")
     print(f"Using {torch.cuda.device_count()} {torch.cuda.get_device_name()} GPU(s).")
 
-    cmd = f"accelerate launch --num_processes {torch.cuda.device_count()} --num_machines 1 --mixed_precision no --dynamo_backend no -m axolotl.cli.train ./config.yml"
+    cmd = f"accelerate launch --num_processes {torch.cuda.device_count()} --num_machines 1 --mixed_precision bf16 --dynamo_backend no -m axolotl.cli.train ./config.yml"
 
     run_cmd(cmd, run_folder)
 

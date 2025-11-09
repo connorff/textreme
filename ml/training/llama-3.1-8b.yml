@@ -72,13 +72,13 @@ seed: 117
 optimizer: adamw_bnb_8bit
 learning_rate: 0.0001
 lr_scheduler: cosine
-num_epochs: 4
+num_epochs: 1
 
 # batch size config
 # UPDATE: adjust based on GPU memory and convergence
-micro_batch_size: 4
+micro_batch_size: 8
 gradient_accumulation_steps: 4
-warmup_steps: 10
+warmup_steps: 5  # reduced from 10 - give more time at peak LR
 
 # axolotl saving config
 dataset_prepared_path: last_run_prepared
@@ -86,7 +86,7 @@ output_dir: ./lora-out
 
 # logging and eval config
 logging_steps: 1
-eval_steps: 0.05
+eval_steps: 20  # fixed step count instead of fraction for more granular eval tracking
 
 # training performance optimization config
 bf16: auto
@@ -117,7 +117,3 @@ strict: false
 
 # don't mess with this, it's here for accelerate and torchrun
 local_rank:
-
-
-
-

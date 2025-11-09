@@ -27,6 +27,8 @@ def get_model_path_from_run(path: Path) -> Path:
     gpu=INFERENCE_GPU_CONFIG,
     image=vllm_image,
     volumes=VOLUME_CONFIG,
+    max_containers=4,
+    buffer_containers=1,
     scaledown_window=15 * MINUTES,
 )
 @modal.concurrent(max_inputs=30)
@@ -69,25 +71,33 @@ class Inference:
         )
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
 
-    def format_prompt(self, input: str) -> str:
-        """Apply Llama 3 chat template matching training format"""
-        SYSTEM_PROMPT = "You are predicting the next text message based on conversation history."
+    def format_prompt(self, input: str, sender: str = "ME", partial_response: str = "") -> str:
+        """
+        Apply Llama 3 chat template matching training format
         
-        # Manually construct Llama 3 chat format (matches training template)
+        Args:
+            input: The conversation context/prompt
+            sender: The name of the sender being predicted
+            partial_response: Optional partial response to complete (model will continue from here)
+        """
+        system_prompt = f"Write a realistic text message response from {sender} of one message or more. Avoid repetition."
+        
+        # manually construct Llama 3 chat format (matches training template)
         formatted = (
             f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
-            f"{SYSTEM_PROMPT}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n"
+            f"{system_prompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n"
             f"{input}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+            f"{partial_response}"
         )
         
         return formatted
 
-    async def _stream(self, input: str, temperature: float = 0.2):
+    async def _stream(self, input: str, temperature: float = 0.2, sender: str = "ME", partial_response: str = ""):
         if not input:
             return
 
         # format with chat template
-        formatted_input = self.format_prompt(input)
+        formatted_input = self.format_prompt(input, sender, partial_response)
 
         sampling_params = SamplingParams(
             repetition_penalty=1.1,
@@ -127,18 +137,18 @@ class Inference:
         )
 
     @modal.method()
-    async def completion(self, input: str, temperature: float = 0.2):
-        async for text in self._stream(input, temperature):
+    async def completion(self, input: str, temperature: float = 0.2, sender: str = "ME", partial_response: str = ""):
+        async for text in self._stream(input, temperature, sender, partial_response):
             yield text
 
     @modal.method()
-    async def non_streaming(self, input: str, temperature: float = 0.2):
-        output = [text async for text in self._stream(input, temperature)]
+    async def non_streaming(self, input: str, temperature: float = 0.2, sender: str = "ME", partial_response: str = ""):
+        output = [text async for text in self._stream(input, temperature, sender, partial_response)]
         return "".join(output)
 
-    @modal.fastapi_endpoint()
-    async def web(self, input: str, temperature: float = 0.2):
-        return StreamingResponse(self._stream(input, temperature), media_type="text/event-stream")
+    @modal.web_endpoint()
+    async def web(self, input: str, temperature: float = 0.2, sender: str = "ME", partial_response: str = ""):
+        return StreamingResponse(self._stream(input, temperature, sender, partial_response), media_type="text/event-stream")
 
     @modal.exit()
     def stop_engine(self):
@@ -152,18 +162,18 @@ class Inference:
 
 
 @app.local_entrypoint()
-def inference_main(run_name: str = "", prompt: str = ""):
+def inference_main(run_name: str = "", prompt: str = "", sender: str = "ME"):
     if not prompt:
         prompt = input(
-            "Enter a prompt (including the prompt template, e.g. [INST] ... [/INST]):\n"
+            "Enter a prompt (conversation context):\n"
         )
 
     print(
-        Colors.GREEN, Colors.BOLD, f"🧠: Querying model {run_name}", Colors.END, sep=""
+        Colors.GREEN, Colors.BOLD, f"🧠: Querying model {run_name} (predicting {sender})", Colors.END, sep=""
     )
 
     response = ""
-    for chunk in Inference(run_name=run_name).completion.remote_gen(prompt):
+    for chunk in Inference(run_name=run_name).completion.remote_gen(prompt, sender=sender):
         response += chunk  # not streaming to avoid mixing with server logs
 
     print(Colors.BLUE, f"👤: {prompt}", Colors.END, sep="")
