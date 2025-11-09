@@ -13,6 +13,7 @@ interface AgentViewProps {
   focusedConversation: UnreadConversation;
   messages: ConversationMessage[];
   onFinalOutputChange: (output: AgentOutput | null) => void;
+  onMessageSent?: () => void;
 }
 
 interface AgentMessage {
@@ -29,6 +30,7 @@ export const AgentView = ({
   focusedConversation,
   messages,
   onFinalOutputChange,
+  onMessageSent,
 }: AgentViewProps) => {
   const [chatHistory, setChatHistory] = useState<AgentMessage[]>([]);
   const [responses, setResponses] = useState<ResponseOption[]>([]);
@@ -161,6 +163,11 @@ export const AgentView = ({
         // Show checkmark
         setSendingIndex(null);
         setSentIndex(index);
+
+        // Refresh messages after a delay to allow DB to update
+        setTimeout(() => {
+          onMessageSent?.();
+        }, 1000);
 
         // Clear responses after a brief delay to show the checkmark
         setTimeout(() => {

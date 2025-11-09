@@ -36,7 +36,7 @@ export const ConversationView = () => {
     handleClearFocus,
   } = useViewMode();
 
-  const { messages, setMessages, messagesContainerRef } = useMessages(
+  const { messages, setMessages, messagesContainerRef, fetchMessages } = useMessages(
     focusedConversation,
     mode
   );
@@ -127,6 +127,13 @@ export const ConversationView = () => {
       // Clear the draft on success
       setDraft("");
       console.log("Message sent successfully!");
+      
+      // Refresh messages after a delay to allow DB to update
+      setTimeout(() => {
+        if (focusedConversation) {
+          fetchMessages(focusedConversation.guid);
+        }
+      }, 1000);
     } else {
       console.error("Failed to send message:", result.error);
       // TODO: Show error to user
@@ -180,6 +187,11 @@ export const ConversationView = () => {
               focusedConversation={focusedConversation}
               messages={messages}
               onFinalOutputChange={setAgentFinalOutput}
+              onMessageSent={() => {
+                if (focusedConversation) {
+                  fetchMessages(focusedConversation.guid);
+                }
+              }}
             />
           </div>
         </div>
@@ -205,6 +217,11 @@ export const ConversationView = () => {
                 messages={messages}
                 focusedConversation={focusedConversation}
                 agentCandidates={null}
+                onMessageSent={() => {
+                  if (focusedConversation) {
+                    fetchMessages(focusedConversation.guid);
+                  }
+                }}
               />
             )}
 
@@ -263,6 +280,11 @@ export const ConversationView = () => {
                   focusedConversation={focusedConversation}
                   messagesContainerRef={messagesContainerRef}
                   showInChatbox={true}
+                  onMessageSent={() => {
+                    if (focusedConversation) {
+                      fetchMessages(focusedConversation.guid);
+                    }
+                  }}
                 />
               </div>
             )}

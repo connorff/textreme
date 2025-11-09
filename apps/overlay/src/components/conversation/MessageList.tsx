@@ -17,6 +17,7 @@ interface MessageListProps {
   messagesContainerRef?: RefObject<HTMLDivElement>;
   showInChatbox?: boolean;
   agentCandidates?: AgentOutput | null;
+  onMessageSent?: () => void;
 }
 
 export const MessageList = ({
@@ -25,6 +26,7 @@ export const MessageList = ({
   messagesContainerRef,
   showInChatbox = false,
   agentCandidates,
+  onMessageSent,
 }: MessageListProps) => {
   const candidatesRef = useRef<HTMLDivElement>(null);
 
@@ -47,7 +49,12 @@ export const MessageList = ({
     try {
       const result = await window.electronAPI.sendIMessage(recipient, message);
       console.log("[AGENT MODE] sendIMessage result:", result);
-      if (!result.success) {
+      if (result.success) {
+        // Refresh messages after a delay to allow DB to update
+        setTimeout(() => {
+          onMessageSent?.();
+        }, 1000);
+      } else {
         console.error("[AGENT MODE] sendIMessage failed:", result.error);
       }
     } catch (error) {
