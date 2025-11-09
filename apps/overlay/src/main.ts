@@ -80,9 +80,10 @@ const createWindow = (): void => {
   });
 
   // Open the DevTools.
-  if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools();
-  }
+  // Commented out to prevent auto-opening DevTools in development
+  // if (!app.isPackaged) {
+  //   mainWindow.webContents.openDevTools();
+  // }
 };
 
 // This method will be called when Electron has finished
