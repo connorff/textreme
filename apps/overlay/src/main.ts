@@ -1531,7 +1531,7 @@ ipcMain.handle(
  * Generate text completions using custom Modal endpoint
  */
 async function generateCompletionsWithModal(
-  lastMessages: Array<{ text: string | null; isFromMe: boolean; contactName: string | null }>,
+  lastMessages: Array<{ text: string | null; isFromMe: boolean; contactName: string | null; date: number }>,
   draft: string,
   displayName: string | null,
   chatIdentifier: string
@@ -1550,29 +1550,52 @@ async function generateCompletionsWithModal(
     contactName = chatIdentifier;
   }
   
-  // Format messages in training format: "{index} {sender}: [text] {content}"
-  const formattedMessages = lastMessages
-    .map((msg, idx) => {
+  // Filter messages by 12-hour gap (same as extract_training_pairs.py line 509-512)
+  const CONVERSATION_GAP_HOURS = 12;
+  const filteredMessages: typeof lastMessages = [];
+  
+  if (lastMessages.length > 0) {
+    const mostRecentDate = lastMessages[lastMessages.length - 1].date;
+    
+    // Walk backward from most recent, stop when we hit a 12-hour gap
+    for (let i = lastMessages.length - 1; i >= 0; i--) {
+      const msg = lastMessages[i];
+      const timeGapSeconds = (mostRecentDate - msg.date) / 1_000_000_000;
+      const timeGapHours = timeGapSeconds / 3600;
+      
+      if (timeGapHours > CONVERSATION_GAP_HOURS) {
+        break; // stop including older messages
+      }
+      
+      filteredMessages.unshift(msg);
+    }
+  }
+  
+  if (filteredMessages.length < lastMessages.length) {
+    console.log(`Filtered ${lastMessages.length - filteredMessages.length} messages older than ${CONVERSATION_GAP_HOURS}h (kept ${filteredMessages.length})`);
+  }
+  
+  // Format messages in training format: "{sender}: {content}"
+  const formattedMessages = filteredMessages
+    .map((msg) => {
       const sender = msg.isFromMe ? "ME" : contactName;
       const text = msg.text || "";
-      // Escape newlines for JSONL format (same as extract_training_pairs.py line 577)
+      // Escape newlines for JSONL format (same as extract_training_pairs.py line 549)
       const escapedText = text.replace(/\n/g, '\\n');
-      return `${idx} ${sender}: [text] ${escapedText}`;
+      return `${sender}: ${escapedText}`;
     });
 
   const input = formattedMessages.join('\n');
   
   // Prepare partial response if draft exists
-  const partialResponse = draft ? `[text] ${draft}` : undefined;
+  const partialResponse = draft ? `ME: ${draft}` : undefined;
 
   // Modal endpoint configuration
-  const MODAL_ENDPOINT = "https://connorff--textreme-inference-web-dev.modal.run";
-  const RUN_NAME = process.env.TEXTREME_MODEL_RUN_NAME || "textreme-2025-11-09-14-13-20-fe40";
-  // Use more diverse temperatures to get varied suggestions
-  const TEMPERATURES = [0.5, 0.9, 1.3];
+  const MODAL_ENDPOINT = "https://connorff--textreme-no-tags-inference-web-dev.modal.run";
+  // Use different temperatures for varied suggestions
+  const TEMPERATURES = [0.2, 0.5, 0.9];
 
   console.log("Request parameters:", {
-    run_name: RUN_NAME,
     sender: "ME",
     input: input,
     partial_response: partialResponse,
@@ -1584,7 +1607,6 @@ async function generateCompletionsWithModal(
     // Make three parallel requests with different temperatures
     const requests = TEMPERATURES.map(async (temperature) => {
       const params = new URLSearchParams({
-        run_name: RUN_NAME,
         temperature: temperature.toString(),
         sender: "ME",
         input: input,
@@ -1609,14 +1631,20 @@ async function generateCompletionsWithModal(
 
       const text = await response.text();
       
-      // Parse response: should be in format "[text] {content}"
-      const match = text.match(/\[text\]\s*(.*?)(?:%|$)/);
-      if (match && match[1]) {
-        return match[1].trim();
-      }
+      console.log(`Response (T=${temperature}):`, text);
       
-      // Fallback: return the whole response if parsing fails
-      return text.trim();
+      // For partial completions, the model returns the continuation as the first line
+      // (with "ME: " prefix), followed by optional additional messages (with "ME: " prefix)
+      // We only want the first line which completes the partial draft
+      const lines = text.split('\n');
+      const firstLine = lines[0].replace(/%$/, '').trim();
+      
+      // Extract content after "ME: " prefix
+      const match = firstLine.match(/^ME:\s*(.+)$/);
+      const completion = match ? match[1].trim() : firstLine;
+      
+      console.log(`Parsed completion (T=${temperature}):`, completion);
+      return completion;
     });
 
     const completions = await Promise.all(requests);
@@ -1677,7 +1705,7 @@ ipcMain.handle(
   "generate-completions",
   async (
     _event,
-    messages: Array<{ text: string | null; isFromMe: boolean; contactName: string | null }>,
+    messages: Array<{ text: string | null; isFromMe: boolean; contactName: string | null; date: number }>,
     draft: string,
     displayName: string | null,
     chatIdentifier: string

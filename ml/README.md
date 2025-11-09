@@ -17,3 +17,4 @@ uv sync
 - Most active contacts, no timestamps: run name = `textreme-2025-11-09-13-11-45-3967`, [wandb link](https://wandb.ai/connorff-stanford/textreme-message-prediction/runs/986gin28)
 - Most active contacts, no timestamps, 4 epochs, stabilize learning rate, potential overfit: run name = `textreme-2025-11-09-14-13-20-fe40`, [wandb link](https://wandb.ai/connorff-stanford/textreme-message-prediction/runs/69jlqnnt)
 - Most active contacts, no timestamps, 1 epoch: run name = `textreme-2025-11-09-14-51-14-54c5`, [wandb link](https://wandb.ai/connorff-stanford/textreme-message-prediction/runs/gt5fl8pp)
+- Just text messages, no timestamps, 2 epochs: run name = `textreme-2025-11-09-18-48-20-2a07`, [wandb link](https://wandb.ai/connorff-stanford/textreme-message-prediction/runs/520o22h6)

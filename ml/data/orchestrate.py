@@ -235,7 +235,6 @@ def cmd_extract():
                 target_phone=identifier,
                 output_file=tmp_path,
                 years_back=YEARS_BACK,
-                include_timestamps=False,
                 verbose=False,
                 contact_name=name
             )

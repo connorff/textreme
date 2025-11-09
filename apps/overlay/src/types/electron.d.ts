@@ -207,7 +207,7 @@ export interface ElectronAPI {
   ) => Promise<ConversationMessagesResult>;
   openSystemPreferences: () => Promise<SystemPreferencesResult>;
   generateCompletions: (
-    messages: Array<{ text: string | null; isFromMe: boolean; contactName: string | null }>,
+    messages: Array<{ text: string | null; isFromMe: boolean; contactName: string | null; date: number }>,
     draft: string,
     displayName: string | null,
     chatIdentifier: string

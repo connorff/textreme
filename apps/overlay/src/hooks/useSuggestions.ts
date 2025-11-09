@@ -50,6 +50,7 @@ export const useSuggestions = (
           text: msg.text,
           isFromMe: msg.isFromMe,
           contactName: msg.contactName,
+          date: msg.date,
         }));
 
         // Get contact name and identifier from focused conversation

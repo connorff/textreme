@@ -30,7 +30,6 @@ MAX_SINGLE_MESSAGE_COMPLETION_WORDS = 64  # drop extremely long single-message c
 DEFAULT_TARGET_PHONE = '+15152235896'
 DEFAULT_YEARS_BACK = 2
 DEFAULT_OUTPUT_FILE = os.path.join(SCRIPT_DIR, 'mom_training_pairs.jsonl')
-DEFAULT_INCLUDE_TIMESTAMPS = False
 
 # Reaction type mapping
 REACTION_MAP = {
@@ -498,6 +497,11 @@ def create_conversation_chunks(user_chunks: List[UserChunk]) -> List[Conversatio
         if not completion_chunk.is_valid or not completion_chunk.is_valid_completion:
             continue
         
+        # skip completions with no TEXT messages
+        has_text_message = any(msg.type == MessageType.TEXT for msg in completion_chunk.messages)
+        if not has_text_message:
+            continue
+        
         # build context backward from completion
         window = [completion_chunk]
         window_indices = {completion_idx}
@@ -535,103 +539,39 @@ def create_conversation_chunks(user_chunks: List[UserChunk]) -> List[Conversatio
     return conv_chunks
 
 
-def format_message_annotation(message: Message, chunk_index: int, 
-                              chat_to_chunk_index: Dict[int, int],
-                              include_timestamps: bool = False) -> Optional[str]:
+def format_message_annotation(message: Message) -> Optional[str]:
     """Format a single message for the prompt part"""
-    # build type annotation
-    type_parts = []
-    
-    # handle reactions - NEVER include reply prefix for reactions
-    if message.type == MessageType.REACTION:
-        if message.reaction_to_chat_index is not None:
-            target_chunk_idx = chat_to_chunk_index.get(message.reaction_to_chat_index)
-            if target_chunk_idx is not None:
-                type_parts.append(f"reaction:{target_chunk_idx}")
-            else:
-                # reaction target outside prompt window - mark invalid
-                return None
-        else:
-            # reaction without target - mark invalid
-            return None
-    else:
-        # handle replies for non-reaction messages
-        if message.reply_to_chat_index is not None:
-            parent_chunk_idx = chat_to_chunk_index.get(message.reply_to_chat_index)
-            if parent_chunk_idx is not None:
-                type_parts.append(f"reply:{parent_chunk_idx}")
-        
-        # add message type for non-reactions
-        type_parts.append(message.type.value)
-    
-    type_annotation = ','.join(type_parts) if type_parts else ''
-    
-    # never emit empty brackets
-    if not type_annotation:
+    # only include text messages
+    if message.type != MessageType.TEXT:
         return None
     
-    # format content
-    content_str = ""
-    if message.content:
-        # escape newlines for JSONL
-        escaped_content = message.content.replace('\n', '\\n')
-        content_str = f" {escaped_content}"
+    # skip messages without content
+    if not message.content:
+        return None
     
-    # conditionally include timestamp
-    if include_timestamps:
-        return f"{chunk_index} [{message.timestamp}] {message.sender}: [{type_annotation}]{content_str}"
-    else:
-        return f"{chunk_index} {message.sender}: [{type_annotation}]{content_str}"
+    # escape newlines for JSONL
+    escaped_content = message.content.replace('\n', '\\n')
+    
+    return f"{message.sender}: {escaped_content}"
 
 
-def format_completion_message(message: Message, chat_to_chunk_index: Dict[int, int]) -> Optional[str]:
+def format_completion_message(message: Message) -> Optional[str]:
     """Format a single message for the completion part"""
-    # only include text and reactions
-    if message.type not in [MessageType.TEXT, MessageType.REACTION]:
+    # only include text messages
+    if message.type != MessageType.TEXT:
         return None
     
-    # build type annotation
-    type_parts = []
-    
-    # handle reactions - NEVER include reply prefix for reactions
-    if message.type == MessageType.REACTION:
-        if message.reaction_to_chat_index is not None:
-            target_chunk_idx = chat_to_chunk_index.get(message.reaction_to_chat_index)
-            if target_chunk_idx is not None:
-                type_parts.append(f"reaction:{target_chunk_idx}")
-            else:
-                # reaction target outside prompt window - skip this message
-                return None
-        else:
-            # reaction without target - skip this message
-            return None
-    else:
-        # handle replies for non-reaction messages
-        if message.reply_to_chat_index is not None:
-            parent_chunk_idx = chat_to_chunk_index.get(message.reply_to_chat_index)
-            if parent_chunk_idx is not None:
-                type_parts.append(f"reply:{parent_chunk_idx}")
-        
-        # add message type for non-reactions
-        type_parts.append(message.type.value)
-    
-    type_annotation = ','.join(type_parts) if type_parts else ''
-    
-    # never emit empty brackets
-    if not type_annotation:
+    # skip messages without content
+    if not message.content:
         return None
     
-    # format content
-    content_str = ""
-    if message.content:
-        # escape newlines for JSONL
-        escaped_content = message.content.replace('\n', '\\n')
-        content_str = f" {escaped_content}"
+    # escape newlines for JSONL
+    escaped_content = message.content.replace('\n', '\\n')
     
-    return f"[{type_annotation}]{content_str}"
+    return f"{message.sender}: {escaped_content}"
 
 
-def format_conversation_chunk(conv_chunk: ConversationChunk, include_timestamps: bool = False) -> Optional[Tuple[str, str, str]]:
+def format_conversation_chunk(conv_chunk: ConversationChunk) -> Optional[Tuple[str, str, str]]:
     """Format a conversation chunk as (prompt, completion, recipient) strings"""
     # filter extremely long single-message completions
     for message in conv_chunk.completion_chunk.messages:
@@ -643,59 +583,34 @@ def format_conversation_chunk(conv_chunk: ConversationChunk, include_timestamps:
     # get the sender of the completion (whose response we're predicting)
     recipient = conv_chunk.completion_chunk.sender
     
-    # build chat_index to chunk_index mapping
-    chat_to_chunk_index = {}
-    chunk_index = 0
-    total_messages = 0
-    
-    # map all messages in prompt + completion
-    for user_chunk in conv_chunk.user_chunks:
-        for message in user_chunk.messages:
-            chat_to_chunk_index[message.chat_index] = chunk_index
-            chunk_index += 1
-            total_messages += 1
-    
-    # validate that all reply/reaction indices are within bounds
-    # skip chunks with out-of-window references (they can't be properly formatted)
-    for user_chunk in conv_chunk.user_chunks:
-        for message in user_chunk.messages:
-            if message.reply_to_chat_index is not None:
-                if message.reply_to_chat_index not in chat_to_chunk_index:
-                    return None  # reply target outside window, skip this chunk
-                if chat_to_chunk_index[message.reply_to_chat_index] >= total_messages:
-                    return None  # reply index out of bounds, skip this chunk
-            if message.reaction_to_chat_index is not None:
-                if message.reaction_to_chat_index not in chat_to_chunk_index:
-                    return None  # reaction target outside window, skip this chunk
-                if chat_to_chunk_index[message.reaction_to_chat_index] >= total_messages:
-                    return None  # reaction index out of bounds, skip this chunk
-    
-    # format prompt (all messages in prompt_chunks)
+    # format prompt (all text messages in prompt_chunks)
     prompt_lines = []
-    chunk_index = 0
     for user_chunk in conv_chunk.prompt_chunks:
         for message in user_chunk.messages:
-            line = format_message_annotation(message, chunk_index, chat_to_chunk_index, include_timestamps)
+            line = format_message_annotation(message)
             if line:  # only include if formatting succeeded
                 prompt_lines.append(line)
-            chunk_index += 1
     
     prompt = '\n'.join(prompt_lines)
     
-    # format completion (only text/reaction messages from completion_chunk)
+    # format completion (only text messages from completion_chunk)
     completion_lines = []
     for message in conv_chunk.completion_chunk.messages:
-        line = format_completion_message(message, chat_to_chunk_index)
+        line = format_completion_message(message)
         if line:
             completion_lines.append(line)
     
     completion = '\n'.join(completion_lines)
     
+    # skip if completion is empty (no text messages)
+    if not completion:
+        return None
+    
     return prompt, completion, recipient
 
 
 def extract_training_pairs(target_phone: str, output_file: str, 
-                          years_back: int = 2, include_timestamps: bool = False,
+                          years_back: int = 2,
                           verbose: bool = True, contact_name: str = "Contact") -> int:
     """Extract training pairs for a specific contact
     
@@ -703,7 +618,6 @@ def extract_training_pairs(target_phone: str, output_file: str,
         target_phone: Phone number or identifier for the contact
         output_file: Path to write JSONL training data
         years_back: Number of years of history to extract
-        include_timestamps: Whether to include timestamps in formatted messages
         verbose: Whether to print progress messages
         contact_name: Name of the contact (other person in conversation)
         
@@ -840,7 +754,7 @@ def extract_training_pairs(target_phone: str, output_file: str,
                         has_long_completion = True
                         break
             
-            formatted = format_conversation_chunk(conv_chunk, include_timestamps)
+            formatted = format_conversation_chunk(conv_chunk)
             if formatted is None:
                 filtered_count += 1
                 if has_long_completion:
@@ -896,8 +810,7 @@ def main():
     extract_training_pairs(
         DEFAULT_TARGET_PHONE,
         DEFAULT_OUTPUT_FILE,
-        DEFAULT_YEARS_BACK,
-        DEFAULT_INCLUDE_TIMESTAMPS
+        DEFAULT_YEARS_BACK
     )
 
 
