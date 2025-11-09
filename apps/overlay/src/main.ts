@@ -32,6 +32,9 @@ const contactCache = new Map<string, string>(); // phone number -> contact name
 let contactMap: Map<string, string> | null = null;
 let contactMapLoading = false;
 
+// Store the original bottom position to keep it fixed during resizes
+let originalBottomY: number | null = null;
+
 const createWindow = (): void => {
   // Get screen dimensions
   const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
@@ -69,6 +72,12 @@ const createWindow = (): void => {
       path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`)
     );
   }
+
+  // Store the original bottom position once window is ready
+  mainWindow.once('ready-to-show', () => {
+    const cb = mainWindow.getContentBounds();
+    originalBottomY = cb.y + cb.height;
+  });
 
   // Open the DevTools.
   if (!app.isPackaged) {
@@ -110,6 +119,43 @@ ipcMain.on("close-window", () => {
     window.close();
   }
 });
+
+/**
+ * Resize window handler — expand upward while keeping bottom fixed
+ */
+ipcMain.on("resize-window", (event, newHeight: number) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return;
+
+  // Work in content-space so transparent/frame/shadow don't skew math
+  const cb = win.getContentBounds();
+
+  // Device-pixel alignment to avoid 1px jitter on scaled displays
+  const scale =
+    screen.getDisplayMatching(cb).scaleFactor ||
+    screen.getPrimaryDisplay().scaleFactor ||
+    1;
+  const align = (v: number) => Math.round(v * scale) / scale;
+
+  // Use the stored original bottom position, or calculate it if not set
+  if (originalBottomY === null) {
+    originalBottomY = cb.y + cb.height;
+  }
+
+  // Always anchor to the original bottom position
+  const targetY = align(originalBottomY - newHeight);
+
+  win.setContentBounds(
+    {
+      x: align(cb.x),
+      y: targetY,
+      width: align(cb.width),
+      height: align(newHeight),
+    },
+    /* animate */ true
+  );
+});
+
 
 /**
  * Check if we have Full Disk Access to read the iMessage database

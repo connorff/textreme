@@ -116,10 +116,18 @@ export const ConversationView = () => {
     if (mode === "blank") {
       setMode("inbox");
       setSelectedIndex(0);
+      // Delay resize until after React renders the inbox
+      requestAnimationFrame(() => {
+        window.electronAPI.resizeWindow(500);
+      });
     } else if (mode === "conversation") {
       // Switch to inbox but keep the focused conversation
       setMode("inbox");
       setSelectedIndex(0);
+      // Delay resize until after React renders the inbox
+      requestAnimationFrame(() => {
+        window.electronAPI.resizeWindow(500);
+      });
     } else if (mode === "inbox") {
       // If there's a focused conversation, go back to it; otherwise go to blank
       if (focusedConversation) {
@@ -127,6 +135,10 @@ export const ConversationView = () => {
       } else {
         setMode("blank");
       }
+      // Delay resize until after React renders
+      requestAnimationFrame(() => {
+        window.electronAPI.resizeWindow(200);
+      });
     }
   };
 
@@ -135,6 +147,10 @@ export const ConversationView = () => {
     const conversation = conversations[index];
     setFocusedConversation(conversation);
     setMode("conversation");
+    // Delay resize until after React renders
+    requestAnimationFrame(() => {
+      window.electronAPI.resizeWindow(200);
+    });
   };
 
   const handleClearFocus = useCallback(() => {
@@ -271,68 +287,11 @@ export const ConversationView = () => {
 
   return (
     <div className="flex flex-col h-screen w-screen bg-background rounded-xl overflow-hidden">
-      {/* Top bar with icons and close button - draggable */}
-      <div
-        className="flex items-center justify-between p-3"
-        style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
-      >
-        {/* Top left icons */}
-        <div
-          className="flex items-center gap-1.5"
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-        >
-          <button
-            onClick={handleInboxClick}
-            className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
-            title="Inbox mode"
-          >
-            <Inbox className="h-4 w-4" />
-          </button>
-          <button
-            className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
-            title="Tab mode"
-          >
-            <Sparkles className="h-4 w-4" />
-          </button>
-          <button
-            className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
-            title="Agent mode"
-          >
-            <Sun className="h-4 w-4" />
-          </button>
-
-          {/* Conversation pill - inline with icons */}
-          {focusedConversation && (
-            <div className="ml-2 px-2 py-1 rounded-md bg-primary/10 text-primary text-sm flex items-center gap-1.5">
-              <CircleUser className="h-4 w-4" />
-              <span>{getDisplayName(focusedConversation)}</span>
-              <button
-                onClick={handleClearFocus}
-                className="ml-0.5 p-0.5 rounded hover:bg-primary/20 transition-colors flex-shrink-0"
-                title="Clear focus"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Top right close button */}
-        <button
-          onClick={handleClose}
-          className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
-          title="Close"
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* Content area */}
-      <div className="flex-1 overflow-hidden">
-        {mode === "inbox" && (
+      {/* Inbox area - only visible when mode is inbox, expands from top */}
+      {mode === "inbox" && (
+        <div className="flex-1 overflow-hidden border-b border-border">
           <ScrollArea className="h-full">
-            <div className="px-3 pb-3">
+            <div className="px-3 pt-3 pb-3">
               {conversations.length === 0 ? (
                 <div className="text-sm text-muted-foreground">
                   No unread conversations
@@ -371,9 +330,70 @@ export const ConversationView = () => {
               )}
             </div>
           </ScrollArea>
-        )}
+        </div>
+      )}
 
-        {mode === "conversation" && focusedConversation && (
+      {/* Chatbox area - always visible at bottom, fixed height */}
+      <div className="h-[200px] flex flex-col">
+        {/* Top bar with icons and close button - draggable */}
+        <div
+          className="flex items-center justify-between p-3"
+          style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+        >
+          {/* Top left icons */}
+          <div
+            className="flex items-center gap-1.5"
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+          >
+            <button
+              onClick={handleInboxClick}
+              className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
+              title="Inbox mode"
+            >
+              <Inbox className="h-4 w-4" />
+            </button>
+            <button
+              className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
+              title="Tab mode"
+            >
+              <Sparkles className="h-4 w-4" />
+            </button>
+            <button
+              className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
+              title="Agent mode"
+            >
+              <Sun className="h-4 w-4" />
+            </button>
+
+            {/* Conversation pill - inline with icons */}
+            {focusedConversation && (
+              <div className="ml-2 px-2 py-1 rounded-md bg-primary/10 text-primary text-sm flex items-center gap-1.5">
+                <CircleUser className="h-4 w-4" />
+                <span>{getDisplayName(focusedConversation)}</span>
+                <button
+                  onClick={handleClearFocus}
+                  className="ml-0.5 p-0.5 rounded hover:bg-primary/20 transition-colors flex-shrink-0"
+                  title="Clear focus"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Top right close button */}
+          <button
+            onClick={handleClose}
+            className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
+            title="Close"
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Chatbox content */}
+        {(mode === "conversation" || mode === "blank") && focusedConversation && (
           <div className="flex flex-col h-full p-3">
             {/* Messages list - grouped by sender with bubbles */}
             <div

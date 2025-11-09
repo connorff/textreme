@@ -34,4 +34,5 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Window control
   closeWindow: () => ipcRenderer.send("close-window"),
+  resizeWindow: (height: number) => ipcRenderer.send("resize-window", height),
 });
