@@ -11,3 +11,5 @@ memory/my_memories/
 .env
 my_memories
 apps/overlay/contacts_dump
+
+contacts_dump
