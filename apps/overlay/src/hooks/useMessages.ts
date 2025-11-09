@@ -10,7 +10,7 @@ export const useMessages = (
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [shouldScrollOnNextUpdate, setShouldScrollOnNextUpdate] = useState(false);
 
   const scrollToBottom = useCallback((instant: boolean = false) => {
     const container = messagesContainerRef.current as any;
@@ -49,7 +49,7 @@ export const useMessages = (
   // Fetch messages when conversation is focused
   useEffect(() => {
     if (focusedConversation && (mode === "tab" || mode === "conversation" || mode === "agent")) {
-      setIsInitialLoad(true);
+      setShouldScrollOnNextUpdate(true);
       fetchMessages(focusedConversation.guid);
     }
   }, [focusedConversation, mode, fetchMessages]);
@@ -61,23 +61,24 @@ export const useMessages = (
     }
 
     const intervalId = setInterval(() => {
-      setIsInitialLoad(false); // prevent scroll during polls
       fetchMessages(focusedConversation.guid);
     }, pollInterval);
 
     return () => {
       clearInterval(intervalId);
     };
-  }, [focusedConversation, mode, fetchMessages]);
+  }, [focusedConversation, mode, fetchMessages, pollInterval]);
 
-  // Auto-scroll to bottom when messages change (always)
+  // Auto-scroll to bottom only when shouldScrollOnNextUpdate is true
   useEffect(() => {
     if (messages.length === 0) return;
-    requestAnimationFrame(() => {
-      scrollToBottom(isInitialLoad); // instant on initial open, smooth on updates
-      setIsInitialLoad(false);
-    });
-  }, [messages, isInitialLoad, scrollToBottom]);
+    if (shouldScrollOnNextUpdate) {
+      requestAnimationFrame(() => {
+        scrollToBottom(true); // instant scroll on initial conversation open
+        setShouldScrollOnNextUpdate(false);
+      });
+    }
+  }, [messages, shouldScrollOnNextUpdate, scrollToBottom]);
 
   return {
     messages,
