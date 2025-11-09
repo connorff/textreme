@@ -17,9 +17,8 @@ let lastToolResult: AgentOutput | null = null;
 
 /**
  * construct_final_response
- * The orchestrator builds a concise construction prompt containing the
- * relevant context and then calls this tool to produce exactly k=4
- * candidate responses in structured form.
+ * Uses Modal endpoint to generate exactly k=4 candidate responses.
+ * Calls the endpoint with 4 different temperatures for diversity.
  */
 export const construct_final_response = tool({
   description:
@@ -48,25 +47,57 @@ export const construct_final_response = tool({
       console.log(
         `[tools] construct_final_response called (count=${constructToolInvocations})`
       );
-      console.log(
-        `[tools] model=openai:${MODEL_CONFIG.model} temperature=${CONSTRUCTOR_TEMPERATURE}`
-      );
+      console.log(`[tools] Using Modal endpoint for generation`);
       console.log(`[tools] prompt preview: "${preview}"...`);
     }
     try {
-      // Optimized system prompt for faster generation
-      const { object } = await generateObject({
-        model: CONSTRUCTOR_MODEL,
-        schema: AgentOutputSchema,
-        system: [
-          "Generate 4 short iMessage replies. Lowercase, no emojis, no em-dashes.",
-          "Vary tone. Each: message (text), reasoning (brief), confidence (0-1).",
-        ].join("\n"),
-        prompt: constructionPrompt,
-        temperature: CONSTRUCTOR_TEMPERATURE,
-        // Reduce maxTokens for faster generation (responses are short anyway)
-        maxTokens: 200,
+      // Modal endpoint configuration (same as tab completion)
+      const MODAL_ENDPOINT = "https://connorff--textreme-inference-web-dev.modal.run";
+      const RUN_NAME = process.env.TEXTREME_MODEL_RUN_NAME || "textreme-2025-11-09-14-13-20-fe40";
+      
+      // Use 4 different temperatures for diversity
+      const TEMPERATURES = [0.6, 0.8, 1.0, 1.2];
+      
+      // The constructionPrompt already contains the formatted conversation context
+      // Make 4 parallel requests with different temperatures
+      const requests = TEMPERATURES.map(async (temperature, idx) => {
+        const params = new URLSearchParams({
+          run_name: RUN_NAME,
+          temperature: temperature.toString(),
+          sender: "ME",
+          input: constructionPrompt,
+        });
+
+        const url = `${MODAL_ENDPOINT}?${params.toString()}`;
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'text/plain',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Modal API returned ${response.status}: ${response.statusText}`);
+        }
+
+        const text = await response.text();
+        
+        // Parse response: should be in format "[text] {content}"
+        const match = text.match(/\[text\]\s*(.*?)(?:%|$)/);
+        const message = match && match[1] ? match[1].trim() : text.trim();
+        
+        return {
+          message: message,
+          reasoning: `Generated with temperature ${temperature}`,
+          confidence: 1.0 - (idx * 0.1), // decreasing confidence for higher temps
+        };
       });
+      
+      const candidates = await Promise.all(requests);
+      
+      const object: AgentOutput = { candidates };
+      
       if (DEBUG) {
         console.log(
           `[tools] construct_final_response produced ${object.candidates.length} candidates`
@@ -90,6 +121,7 @@ export const construct_final_response = tool({
 /**
  * predict_recipient_responses
  * Takes the 4 candidate messages and predicts how the recipient would respond to each.
+ * Uses the same Modal endpoint as tab completion for consistency.
  * Returns a complete AgentOutput with predictions included.
  */
 export const predict_recipient_responses = tool({
@@ -143,39 +175,59 @@ export const predict_recipient_responses = tool({
 
     try {
       const predictions: string[] = [];
-      const name = recipientName || "the recipient";
+      const name = recipientName || "Contact";
 
-      // Predict response for each candidate
+      // Modal endpoint configuration (same as tab completion)
+      const MODAL_ENDPOINT = "https://connorff--textreme-inference-web-dev.modal.run";
+      const RUN_NAME = process.env.TEXTREME_MODEL_RUN_NAME || "textreme-2025-11-09-14-13-20-fe40";
+
+      // Predict response for each candidate using Modal endpoint
       for (let i = 0; i < candidates.length; i++) {
         const candidate = candidates[i];
 
-        const prompt = [
-          `You are predicting how ${name} would respond to a message.`,
-          "",
-          "Context:",
-          conversationContext,
-          "",
-          `If you send: "${candidate.message}"`,
-          "",
-          `Predict a realistic, natural response from ${name}. Keep it SHORT (1-2 sentences).`,
-          "Match their texting style from the conversation context.",
-          "IMPORTANT: Use all lowercase, no emojis, no em-dashes.",
-        ].join("\n");
-
-        const { text } = await generateText({
-          model: PREDICTION_MODEL,
-          prompt,
-          temperature: 0.7,
-          maxTokens: 100,
+        // Use the conversationContext as input (already formatted) and add the ME response
+        const input = `${conversationContext}\n${conversationContext.split('\n').length} ME: [text] ${candidate.message}`;
+        
+        const params = new URLSearchParams({
+          run_name: RUN_NAME,
+          temperature: "0.8",
+          sender: name,
+          input: input,
         });
 
-        const finalText = text.trim();
-        predictions.push(finalText);
+        const url = `${MODAL_ENDPOINT}?${params.toString()}`;
+        
+        try {
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'Accept': 'text/plain',
+            },
+          });
 
-        if (DEBUG) {
-          console.log(
-            `[tools] Predicted response ${i + 1}: "${finalText.slice(0, 50)}..."`
-          );
+          if (!response.ok) {
+            throw new Error(`Modal API returned ${response.status}`);
+          }
+
+          const text = await response.text();
+          
+          // Parse response: should be in format "[text] {content}"
+          const match = text.match(/\[text\]\s*(.*?)(?:%|$)/);
+          const prediction = match && match[1] ? match[1].trim() : text.trim();
+          
+          predictions.push(prediction);
+
+          if (DEBUG) {
+            console.log(
+              `[tools] Predicted response ${i + 1}: "${prediction.slice(0, 50)}..."`
+            );
+          }
+        } catch (error) {
+          if (DEBUG) {
+            console.error(`[tools] Modal prediction error for candidate ${i + 1}:`, error);
+          }
+          // Use a fallback prediction on error
+          predictions.push("[Prediction unavailable]");
         }
       }
 

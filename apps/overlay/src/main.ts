@@ -1568,7 +1568,8 @@ async function generateCompletionsWithModal(
   // Modal endpoint configuration
   const MODAL_ENDPOINT = "https://connorff--textreme-inference-web-dev.modal.run";
   const RUN_NAME = process.env.TEXTREME_MODEL_RUN_NAME || "textreme-2025-11-09-14-13-20-fe40";
-  const TEMPERATURES = [0.4, 0.7, 1.0];
+  // Use more diverse temperatures to get varied suggestions
+  const TEMPERATURES = [0.5, 0.9, 1.3];
 
   console.log("Request parameters:", {
     run_name: RUN_NAME,
@@ -1619,11 +1620,56 @@ async function generateCompletionsWithModal(
     });
 
     const completions = await Promise.all(requests);
-    return completions;
+    
+    // Deduplicate and filter similar completions
+    const uniqueCompletions = deduplicateCompletions(completions);
+    
+    return uniqueCompletions;
   } catch (error) {
     console.error("Modal API error:", error);
     throw error;
   }
+}
+
+/**
+ * Deduplicate completions and filter out very similar ones
+ * Returns up to 3 diverse completions
+ */
+function deduplicateCompletions(completions: string[]): string[] {
+  if (completions.length === 0) return completions;
+  
+  const unique: string[] = [];
+  
+  for (const completion of completions) {
+    const normalized = completion.toLowerCase().trim();
+    
+    // Check if this completion is too similar to any we've already added
+    const isSimilar = unique.some(existing => {
+      const existingNormalized = existing.toLowerCase().trim();
+      
+      // Exact match
+      if (normalized === existingNormalized) return true;
+      
+      // Calculate similarity using simple word overlap
+      const words1 = new Set(normalized.split(/\s+/));
+      const words2 = new Set(existingNormalized.split(/\s+/));
+      
+      const intersection = new Set([...words1].filter(w => words2.has(w)));
+      const union = new Set([...words1, ...words2]);
+      
+      // Jaccard similarity > 0.8 means very similar
+      const similarity = intersection.size / union.size;
+      return similarity > 0.8;
+    });
+    
+    if (!isSimilar) {
+      unique.push(completion);
+    }
+  }
+  
+  // If we filtered too many, return the original completions
+  // (better to show duplicates than nothing)
+  return unique.length > 0 ? unique : completions;
 }
 
 // IPC handler for generating autocomplete suggestions with messages from UI
