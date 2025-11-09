@@ -79,7 +79,8 @@ export const ConversationView = () => {
   };
 
   const handleSuggestionClick = (suggestion: string) => {
-    setDraft(suggestion);
+    // Append suggestion to current draft with a space
+    setDraft(draft + " " + suggestion);
     inputRef.current?.focus();
   };
 

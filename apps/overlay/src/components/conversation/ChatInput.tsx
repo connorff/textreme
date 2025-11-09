@@ -1,6 +1,4 @@
 import { RefObject } from "react";
-import { Popover, PopoverContent } from "@/components/ui/popover";
-import { CommandList, CommandItem } from "@/components/ui/command";
 
 interface ChatInputProps {
   draft: string;
@@ -23,93 +21,81 @@ export const ChatInput = ({
   suggestionRefs,
   isTyping,
 }: ChatInputProps) => {
-  return (
-    <div className="relative">
-      <Popover
-        open={suggestions.length > 0 && !isTyping}
-        onOpenChange={() => {
-          // Controlled by suggestions state
-        }}
-      >
-        {/* Input */}
-        <div className="relative min-h-[28px]">
-          <div className="flex items-center min-h-[28px]">
-            {/* User's typed text */}
-            {draft ? (
-              <span
-                className="text-sm text-foreground font-normal"
-                style={{
-                  fontFamily: "Inter, sans-serif",
-                  fontSize: "14px",
-                  lineHeight: "20px",
-                }}
-              >
-                {draft}
-              </span>
-            ) : (
-              <span
-                className="text-sm text-muted-foreground/50 font-normal"
-                style={{
-                  fontFamily: "Inter, sans-serif",
-                  fontSize: "14px",
-                  lineHeight: "20px",
-                }}
-              >
-                Type a message...
-              </span>
-            )}
-          </div>
-          {/* Actual input for typing */}
-          <input
-            ref={inputRef}
-            type="text"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            className="absolute inset-0 w-full h-full bg-transparent border-none outline-none text-sm text-transparent caret-foreground"
-            aria-label="Type a message"
-            style={{
-              fontFamily: "Inter, sans-serif",
-              fontSize: "14px",
-              lineHeight: "20px",
-            }}
-          />
-        </div>
+  const showSuggestions = suggestions.length > 0 && !isTyping;
 
-        {/* Autocomplete dropdown - below input */}
-        <PopoverContent
-          side="bottom"
-          align="start"
-          sideOffset={4}
-          className="p-0 w-auto max-w-full border-gray-100 absolute top-full mt-1 left-0"
+  return (
+    <div className="relative w-full">
+      {/* User's typed text - always at top in black */}
+      <div className="relative min-h-[28px] mb-1">
+        <div className="flex items-center min-h-[28px]">
+          {draft ? (
+            <span
+              className="text-sm text-black font-normal"
+              style={{
+                fontFamily: "Inter, sans-serif",
+                fontSize: "14px",
+                lineHeight: "20px",
+              }}
+            >
+              {draft}
+            </span>
+          ) : (
+            <span
+              className="text-sm text-muted-foreground/50 font-normal"
+              style={{
+                fontFamily: "Inter, sans-serif",
+                fontSize: "14px",
+                lineHeight: "20px",
+              }}
+            >
+              Type a message...
+            </span>
+          )}
+        </div>
+        {/* Actual input for typing */}
+        <input
+          ref={inputRef}
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          className="absolute inset-0 w-full h-full bg-transparent border-none outline-none text-sm text-transparent caret-black"
+          aria-label="Type a message"
           style={{
-            boxShadow:
-              "0 2px 8px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.05)",
+            fontFamily: "Inter, sans-serif",
+            fontSize: "14px",
+            lineHeight: "20px",
           }}
-        >
-          <CommandList className="max-h-48">
-            {suggestions.map((suggestion, idx) => (
-              <CommandItem
-                key={idx}
-                ref={(el) => {
-                  if (suggestionRefs.current) {
-                    suggestionRefs.current[idx] = el;
-                  }
-                }}
-                onClick={() => onSuggestionClick(suggestion)}
-                selected={idx === selectedSuggestionIndex}
-                className="px-3 py-1.5 text-sm cursor-pointer"
-                style={{
-                  fontFamily: "Inter, sans-serif",
-                  fontSize: "14px",
-                  lineHeight: "20px",
-                }}
-              >
-                {suggestion}
-              </CommandItem>
-            ))}
-          </CommandList>
-        </PopoverContent>
-      </Popover>
+        />
+      </div>
+
+      {/* Autocomplete suggestions - below user text in grey */}
+      {showSuggestions && (
+        <div className="space-y-0.5">
+          {suggestions.map((suggestion, idx) => (
+            <div
+              key={idx}
+              ref={(el) => {
+                if (suggestionRefs.current) {
+                  suggestionRefs.current[idx] = el;
+                }
+              }}
+              onClick={() => onSuggestionClick(suggestion)}
+              className={`w-full py-1 px-1 text-sm cursor-pointer transition-colors rounded-md ${
+                idx === selectedSuggestionIndex
+                  ? "text-gray-500 bg-gray-100"
+                  : "text-gray-300 hover:bg-gray-100"
+              }`}
+              style={{
+                fontFamily: "Inter, sans-serif",
+                fontSize: "14px",
+                lineHeight: "20px",
+              }}
+            >
+              {suggestion}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
