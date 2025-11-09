@@ -52,11 +52,11 @@ export const AgentView = ({
   // Auto-scroll conversation history to bottom only on initial load
   useEffect(() => {
     if (shouldScrollMessages && messages.length > 0) {
-      requestAnimationFrame(() => {
-        if (historyRef.current) {
-          historyRef.current.scrollTop = historyRef.current.scrollHeight;
-        }
-      });
+    requestAnimationFrame(() => {
+      if (historyRef.current) {
+        historyRef.current.scrollTop = historyRef.current.scrollHeight;
+      }
+    });
       setShouldScrollMessages(false);
     }
   }, [messages, shouldScrollMessages]);
