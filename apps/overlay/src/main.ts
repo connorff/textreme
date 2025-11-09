@@ -1,3 +1,5 @@
+import "dotenv/config";
+import { config } from "dotenv";
 import {
   app,
   BrowserWindow,
@@ -11,6 +13,14 @@ import { DatabaseSync } from "node:sqlite";
 import os from "os";
 import { spawn, exec } from "child_process";
 import { promisify } from "util";
+import { randomUUID } from "crypto";
+import { runAgentStream } from "../agent/run";
+import type { AgentContext } from "../agent";
+
+// Load .env file - dotenv/config loads from process.cwd() by default
+// Also try loading from apps/overlay/.env explicitly (doesn't error if file doesn't exist)
+const overlayEnvPath = path.join(__dirname, "../../.env");
+config({ path: overlayEnvPath });
 
 const execAsync = promisify(exec);
 
@@ -37,16 +47,17 @@ let originalBottomY: number | null = null;
 
 const createWindow = (): void => {
   // Get screen dimensions
-  const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
-  
+  const { width: screenWidth, height: screenHeight } =
+    screen.getPrimaryDisplay().workAreaSize;
+
   const windowWidth = 600;
   const windowHeight = 200;
   const bottomMargin = 2; // Distance from bottom of screen
-  
+
   // Calculate position: centered horizontally, at bottom vertically
   const x = Math.floor((screenWidth - windowWidth) / 2);
   const y = screenHeight - windowHeight - bottomMargin;
-  
+
   // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: windowWidth,
@@ -56,7 +67,7 @@ const createWindow = (): void => {
     frame: false,
     transparent: true, // Remove backdrop shadow
     hasShadow: false, // Remove window shadow on macOS
-    backgroundColor: '#00000000', // Fully transparent background
+    backgroundColor: "#00000000", // Fully transparent background
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
@@ -74,7 +85,7 @@ const createWindow = (): void => {
   }
 
   // Store the original bottom position once window is ready
-  mainWindow.once('ready-to-show', () => {
+  mainWindow.once("ready-to-show", () => {
     const cb = mainWindow.getContentBounds();
     originalBottomY = cb.y + cb.height;
   });
@@ -156,7 +167,6 @@ ipcMain.on("resize-window", (event, newHeight: number) => {
     /* animate */ true
   );
 });
-
 
 /**
  * Check if we have Full Disk Access to read the iMessage database
@@ -652,44 +662,45 @@ async function loadContactMap(): Promise<Map<string, string>> {
 
         // Store many different format variations to maximize matching
         const variants = new Set<string>();
-        
+
         // Add the normalized version
         variants.add(normalized);
-        
+
         // Add without leading +
         if (normalized.startsWith("+")) {
           variants.add(normalized.slice(1));
         }
-        
+
         // Add without +1 prefix
         if (normalized.startsWith("+1")) {
           variants.add(normalized.slice(2));
         }
-        
-        // Add without 1 prefix  
+
+        // Add without 1 prefix
         if (normalized.startsWith("1") && normalized.length === 11) {
           variants.add(normalized.slice(1));
         }
-        
+
         // Add last 10 digits (US phone number)
         if (normalized.length >= 10) {
           variants.add(normalized.slice(-10));
         }
-        
+
         // Add last 7 digits (local number)
         if (normalized.length >= 7) {
           variants.add(normalized.slice(-7));
         }
-        
+
         // Add with +1 prefix if not present and looks like US number
         if (!normalized.startsWith("+") && normalized.length === 10) {
           variants.add("+1" + normalized);
           variants.add("1" + normalized);
         }
-        
+
         // Store all variants
         for (const variant of variants) {
-          if (variant.length >= 7) { // Only store variants with reasonable length
+          if (variant.length >= 7) {
+            // Only store variants with reasonable length
             map.set(variant, name);
           }
         }
@@ -697,11 +708,11 @@ async function loadContactMap(): Promise<Map<string, string>> {
     }
 
     console.log(`Built contact map with ${map.size} phone number mappings`);
-    
+
     // Debug: Show a sample of what's in the map
     const sampleEntries = Array.from(map.entries()).slice(0, 10);
     console.log(`[Contact Map] Sample entries:`, sampleEntries);
-    
+
     contactMap = map;
     return map;
   } catch (error: any) {
@@ -780,36 +791,36 @@ function lookupContactName(identifier: string): string | null {
   // Try various normalized formats (matching what we store in the map)
   const normalized = normalizePhoneNumber(identifier);
   const formats = new Set<string>();
-  
+
   // Add original and normalized
   formats.add(identifier);
   formats.add(normalized);
-  
+
   // Add without leading +
   if (normalized.startsWith("+")) {
     formats.add(normalized.slice(1));
   }
-  
+
   // Add without +1 prefix
   if (normalized.startsWith("+1")) {
     formats.add(normalized.slice(2));
   }
-  
+
   // Add without 1 prefix
   if (normalized.startsWith("1") && normalized.length === 11) {
     formats.add(normalized.slice(1));
   }
-  
+
   // Add last 10 digits (US phone number)
   if (normalized.length >= 10) {
     formats.add(normalized.slice(-10));
   }
-  
+
   // Add last 7 digits (local number)
   if (normalized.length >= 7) {
     formats.add(normalized.slice(-7));
   }
-  
+
   // Add with +1 prefix if not present and looks like US number
   if (!normalized.startsWith("+") && normalized.length === 10) {
     formats.add("+1" + normalized);
@@ -827,6 +838,171 @@ function lookupContactName(identifier: string): string | null {
   }
 
   return null;
+}
+
+type AgentContextRow = {
+  text: string | null;
+  attributedBody: Buffer | null;
+  is_from_me: number;
+  date: string;
+  handle_identifier: string | null;
+  display_name: string | null;
+  chat_identifier: string;
+};
+
+async function buildAgentContext(
+  chatGuid: string,
+  messages?: Array<{
+    text: string;
+    isFromMe: boolean;
+    handleId?: string;
+    date: number;
+  }>
+): Promise<AgentContext> {
+  // If messages are provided, use them directly
+  if (messages && messages.length > 0) {
+    // Get contact name from database
+    let contactName: string | undefined;
+    let db: DatabaseSync | null = null;
+    try {
+      db = new DatabaseSync(CHAT_DB_PATH, { readOnly: true });
+      const chatStmt = db.prepare(`
+        SELECT display_name, chat_identifier
+        FROM chat
+        WHERE guid = ?
+        LIMIT 1
+      `);
+      const chatRow = chatStmt.get(chatGuid) as
+        | {
+            display_name: string | null;
+            chat_identifier: string | null;
+          }
+        | undefined;
+      contactName =
+        chatRow?.display_name || chatRow?.chat_identifier || undefined;
+    } finally {
+      if (db) {
+        db.close();
+      }
+    }
+
+    return {
+      contactName,
+      conversation: messages.map((msg) => ({
+        isFromMe: msg.isFromMe,
+        text: msg.text,
+      })),
+    };
+  }
+
+  // Fallback: query database (for backward compatibility)
+  let db: DatabaseSync | null = null;
+  let rows: AgentContextRow[] = [];
+  try {
+    db = new DatabaseSync(CHAT_DB_PATH, { readOnly: true });
+    const stmt = db.prepare(`
+      SELECT 
+        m.text,
+        m.attributedBody,
+        CAST(m.date AS TEXT) as date,
+        m.is_from_me,
+        h.id as handle_identifier,
+        c.display_name,
+        c.chat_identifier
+      FROM message m
+      INNER JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+      INNER JOIN chat c ON cmj.chat_id = c.ROWID
+      LEFT JOIN handle h ON m.handle_id = h.ROWID
+      WHERE c.guid = ?
+        AND m.item_type = 0
+        AND m.is_finished = 1
+        AND m.is_system_message = 0
+      ORDER BY m.date DESC
+      LIMIT 30
+    `);
+    rows = stmt.all(chatGuid) as AgentContextRow[];
+  } finally {
+    if (db) {
+      db.close();
+    }
+  }
+
+  if (!rows.length) {
+    let fallbackName: string | undefined;
+    let fallbackDb: DatabaseSync | null = null;
+    try {
+      fallbackDb = new DatabaseSync(CHAT_DB_PATH, { readOnly: true });
+      const chatStmt = fallbackDb.prepare(`
+        SELECT display_name, chat_identifier
+        FROM chat
+        WHERE guid = ?
+        LIMIT 1
+      `);
+      const chatRow = chatStmt.get(chatGuid) as
+        | {
+            display_name: string | null;
+            chat_identifier: string | null;
+          }
+        | undefined;
+      fallbackName =
+        chatRow?.display_name ?? chatRow?.chat_identifier ?? undefined;
+    } finally {
+      if (fallbackDb) {
+        fallbackDb.close();
+      }
+    }
+    return {
+      contactName: fallbackName,
+      conversation: [],
+    };
+  }
+
+  const phoneNumbers = rows
+    .map((row) => row.handle_identifier)
+    .filter(
+      (identifier): identifier is string =>
+        typeof identifier === "string" &&
+        !identifier.includes("@") &&
+        isValidPhoneNumber(identifier)
+    );
+
+  const numbersToLoad = phoneNumbers.filter((num) => !contactCache.has(num));
+  if (numbersToLoad.length > 0) {
+    await loadContactsForNumbers(numbersToLoad);
+  }
+
+  let contactName: string | undefined;
+  const displayNameRow = rows.find((row) => row.display_name);
+  if (displayNameRow?.display_name) {
+    contactName = displayNameRow.display_name;
+  } else {
+    const handleRow = rows.find((row) => row.handle_identifier);
+    if (handleRow?.handle_identifier) {
+      contactName = lookupContactName(handleRow.handle_identifier) ?? undefined;
+    }
+  }
+
+  if (!contactName) {
+    const identifierRow = rows.find((row) => row.chat_identifier);
+    if (identifierRow?.chat_identifier) {
+      contactName = identifierRow.chat_identifier;
+    }
+  }
+
+  const conversation = rows
+    .map((row) => {
+      const messageText = extractMessageText(row.text, row.attributedBody);
+      return {
+        isFromMe: row.is_from_me === 1,
+        text: messageText ?? "",
+      };
+    })
+    .reverse();
+
+  return {
+    contactName,
+    conversation,
+  };
 }
 
 /**
@@ -1316,6 +1492,101 @@ ipcMain.handle(
       if (db) {
         db.close();
       }
+    }
+  }
+);
+
+ipcMain.handle(
+  "run-agent",
+  async (
+    event,
+    query: string,
+    chatGuid: string,
+    messages: Array<{
+      text: string;
+      isFromMe: boolean;
+      handleId?: string;
+      date: number;
+    }>
+  ) => {
+    if (!query || !query.trim()) {
+      return {
+        success: false,
+        error: "Query is required to run the agent",
+      };
+    }
+    if (!chatGuid) {
+      return {
+        success: false,
+        error: "Conversation GUID is required",
+      };
+    }
+
+    try {
+      const context = await buildAgentContext(chatGuid, messages);
+      const agentResult = await runAgentStream(query, context);
+      const streamId = randomUUID();
+      const webContents = event.sender;
+      const DEBUG = process.env.TEXTREME_AGENT_DEBUG === "1";
+
+      if (DEBUG) {
+        console.log(
+          `[agent] run-agent invoked (streamId=${streamId}) for conversation=${chatGuid}`
+        );
+      }
+
+      const channel = `agent-stream:${streamId}`;
+
+      setImmediate(async () => {
+        try {
+          for await (const agentEvent of agentResult.fullStream) {
+            if (webContents.isDestroyed()) {
+              break;
+            }
+            webContents.send(channel, agentEvent);
+          }
+
+          const finalOutput = await agentResult.getFinalOutput();
+          if (!webContents.isDestroyed()) {
+            if (DEBUG) {
+              console.log(
+                `[agent] Stream complete (streamId=${streamId}), delivering final output`
+              );
+            }
+            webContents.send(channel, {
+              type: "complete",
+              finalOutput,
+            });
+          }
+        } catch (streamError: any) {
+          if (DEBUG) {
+            console.error(
+              `[agent] Stream error (streamId=${streamId}):`,
+              streamError
+            );
+          }
+          if (!webContents.isDestroyed()) {
+            webContents.send(channel, {
+              type: "error",
+              error:
+                streamError instanceof Error
+                  ? streamError.message
+                  : String(streamError),
+            });
+          }
+        }
+      });
+
+      return {
+        success: true,
+        streamId,
+      };
+    } catch (error: any) {
+      console.error("Error running agent:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to run agent",
+      };
     }
   }
 );

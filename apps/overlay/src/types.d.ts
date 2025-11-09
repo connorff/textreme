@@ -1,51 +1,18 @@
-interface ElectronAPI {
-  // Database access
-  checkDatabaseAccess: () => Promise<{
-    hasAccess: boolean;
-    path: string;
-    fileSize?: number;
-    lastModified?: Date;
-    error?: string;
-  }>;
-  getDatabaseStats: () => Promise<{
-    success: boolean;
-    fileSize?: number;
-    fileSizeMB?: string;
-    lastModified?: string;
-    path?: string;
-    error?: string;
-  }>;
-  getDatabaseTables: () => Promise<{
-    success: boolean;
-    tables?: Array<{ name: string; type: string }>;
-    totalCount?: number;
-    error?: string;
-  }>;
-
-  // System
-  openSystemPreferences: () => Promise<{
-    success: boolean;
-    error?: string;
-  }>;
-
-  // iMessage
-  sendIMessage: (
-    recipient: string,
-    messageText: string
-  ) => Promise<{
-    success: boolean;
-    message?: string;
-    error?: string;
-  }>;
-}
+import type { ElectronAPI as ElectronAPIBase } from "./types/electron";
 
 declare global {
+  interface ElectronAPI extends ElectronAPIBase {}
   interface Window {
     electronAPI: ElectronAPI;
   }
 }
 
 declare module "*.svg" {
+  const content: string;
+  export default content;
+}
+
+declare module "*.svg?url" {
   const content: string;
   export default content;
 }

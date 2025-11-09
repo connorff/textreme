@@ -5,8 +5,10 @@ import type { UnreadConversation } from "../../types/electron";
 interface TopBarProps {
   mode: ViewMode;
   focusedConversation: UnreadConversation | null;
+  composeMode: "tab" | "agent";
   onInboxClick: () => void;
   onTabClick: () => void;
+  onAgentClick: () => void;
   onClearFocus: () => void;
   onClose: () => void;
   getDisplayName: (conversation: UnreadConversation) => string;
@@ -15,12 +17,17 @@ interface TopBarProps {
 export const TopBar = ({
   mode,
   focusedConversation,
+  composeMode,
   onInboxClick,
   onTabClick,
+  onAgentClick,
   onClearFocus,
   onClose,
   getDisplayName,
 }: TopBarProps) => {
+  const currentComposeMode =
+    mode === "agent" ? "agent" : mode === "tab" ? "tab" : composeMode;
+
   return (
     <div
       className="flex items-center justify-between p-3"
@@ -69,7 +76,7 @@ export const TopBar = ({
           <button
             onClick={onTabClick}
             className={`p-1.5 rounded-md transition-colors ${
-              mode === "tab"
+              currentComposeMode === "tab"
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
@@ -78,8 +85,9 @@ export const TopBar = ({
             <Pencil className="h-4 w-4" />
           </button>
           <button
+            onClick={onAgentClick}
             className={`p-1.5 rounded-md transition-colors ${
-              mode === "conversation"
+              currentComposeMode === "agent"
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
@@ -101,4 +109,3 @@ export const TopBar = ({
     </div>
   );
 };
-

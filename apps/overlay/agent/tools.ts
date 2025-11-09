@@ -2,6 +2,11 @@ import { tool, generateObject } from "ai";
 import { z } from "zod";
 import { openai } from "@ai-sdk/openai";
 import { AgentOutput, AgentOutput as AgentOutputSchema } from "./types";
+import { getAgentModelConfig } from "./config";
+
+const MODEL_CONFIG = getAgentModelConfig();
+const CONSTRUCTOR_MODEL = openai(MODEL_CONFIG.model);
+const CONSTRUCTOR_TEMPERATURE = MODEL_CONFIG.temperature;
 
 let constructToolInvocations = 0;
 let lastToolResult: AgentOutput | null = null;
@@ -39,14 +44,30 @@ export const construct_final_response = tool({
       console.log(
         `[tools] construct_final_response called (count=${constructToolInvocations})`
       );
+      console.log(
+        `[tools] model=openai:${MODEL_CONFIG.model} temperature=${CONSTRUCTOR_TEMPERATURE}`
+      );
       console.log(`[tools] prompt preview: "${preview}"...`);
     }
     try {
       const { object } = await generateObject({
-        model: openai("gpt-5-mini"),
+        model: CONSTRUCTOR_MODEL,
         schema: AgentOutputSchema,
+        system: [
+          "You generate natural iMessage reply options.",
+          "Create exactly 3 diverse candidates that:",
+          "- Directly respond to what was said",
+          "- Match the specified tone and style",
+          "- Are short and natural (like real texts)",
+          "- Vary in approach/tone/length",
+          "",
+          "For each candidate provide:",
+          "- message: The actual text to send",
+          "- reasoning: Brief explanation of the approach/tone",
+          "- confidence: Float 0-1 (how appropriate this reply is)",
+        ].join("\n"),
         prompt: constructionPrompt,
-        temperature: 1,
+        temperature: CONSTRUCTOR_TEMPERATURE,
       });
       if (DEBUG) {
         console.log(

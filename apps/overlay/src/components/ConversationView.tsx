@@ -9,21 +9,32 @@ import { MessageList } from "./conversation/MessageList";
 import { ChatInput } from "./conversation/ChatInput";
 import { TopBar } from "./conversation/TopBar";
 import { getDisplayName } from "../lib/conversationUtils";
-import HelloSvg from "../assets/AppleHello.svg";
+import { AgentView } from "./AgentView";
+import type { UnreadConversation, AgentOutput } from "../types/electron";
+
+const HELLO_SVG = new URL(
+  "../assets/AppleHello.svg",
+  import.meta.url
+).toString();
 
 export const ConversationView = () => {
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const selectedRef = useRef<HTMLButtonElement>(null);
+  const [agentFinalOutput, setAgentFinalOutput] = useState<AgentOutput | null>(
+    null
+  );
 
   // Custom hooks
   const { conversations, selectedIndex, setSelectedIndex } = useConversations();
-  
+
   const {
     mode,
+    composeMode,
     focusedConversation,
     handleInboxClick,
     handleTabClick,
+    handleAgentClick,
     handleSelectConversation,
     handleClearFocus,
   } = useViewMode();
@@ -84,7 +95,10 @@ export const ConversationView = () => {
     inputRef.current?.focus();
   };
 
-  const handleConversationSelect = (conversation: any, index: number) => {
+  const handleConversationSelect = (
+    conversation: UnreadConversation,
+    index: number
+  ) => {
     setSelectedIndex(index);
     handleSelectConversation(conversation);
   };
@@ -92,8 +106,16 @@ export const ConversationView = () => {
   const handleClearFocusWithCleanup = () => {
     setMessages([]);
     setDraft("");
+    setAgentFinalOutput(null);
     handleClearFocus();
   };
+
+  // Clear agent output when conversation changes
+  useEffect(() => {
+    if (mode !== "agent") {
+      setAgentFinalOutput(null);
+    }
+  }, [focusedConversation?.guid, mode]);
 
   // Keyboard navigation
   useKeyboardNavigation({
@@ -129,30 +151,34 @@ export const ConversationView = () => {
         />
       )}
 
-      {/* Tab mode - conversation messages displayed above chatbox */}
-      {mode === "tab" && focusedConversation && (
-        <MessageList
-          messages={messages}
-          focusedConversation={focusedConversation}
-        />
-      )}
+      {/* Conversation messages displayed above chatbox */}
+      {(mode === "tab" || mode === "agent" || mode === "conversation") &&
+        focusedConversation && (
+          <MessageList
+            messages={messages}
+            focusedConversation={focusedConversation}
+            agentCandidates={mode === "agent" ? agentFinalOutput : null}
+          />
+        )}
 
       {/* Chatbox area - always visible at bottom, fixed height */}
       <div className="h-[200px] flex flex-col">
         <TopBar
           mode={mode}
           focusedConversation={focusedConversation}
+          composeMode={composeMode}
           onInboxClick={handleInboxClick}
           onTabClick={handleTabClick}
+          onAgentClick={handleAgentClick}
           onClearFocus={handleClearFocusWithCleanup}
           onClose={handleClose}
           getDisplayName={getDisplayName}
         />
 
         {/* Chatbox content - show Hello.svg when not in tab or agent mode */}
-        {mode !== "tab" && mode !== "conversation" && (
+        {mode !== "tab" && mode !== "agent" && mode !== "conversation" && (
           <div className="flex items-center justify-center h-full pb-10">
-            <img src={HelloSvg} alt="Hello" className="w-44 opacity-50" />
+            <img src={HELLO_SVG} alt="Hello" className="w-44 opacity-50" />
           </div>
         )}
 
@@ -170,6 +196,14 @@ export const ConversationView = () => {
               isTyping={isTyping}
             />
           </div>
+        )}
+
+        {mode === "agent" && focusedConversation && (
+          <AgentView
+            focusedConversation={focusedConversation}
+            messages={messages}
+            onFinalOutputChange={setAgentFinalOutput}
+          />
         )}
 
         {/* Chatbox content - full conversation view (old mode) */}
@@ -197,4 +231,3 @@ export const ConversationView = () => {
     </div>
   );
 };
-

@@ -3,6 +3,11 @@ import { openai } from "@ai-sdk/openai";
 import { type AgentOutput, AgentOutput as AgentOutputSchema } from "./types";
 import { buildInstructions, type AgentContext } from "./agent";
 import { tools, getLastToolResult } from "./tools";
+import { getAgentModelConfig } from "./config";
+
+const MODEL_CONFIG = getAgentModelConfig();
+const AGENT_MODEL = openai(MODEL_CONFIG.model);
+const AGENT_TEMPERATURE = MODEL_CONFIG.temperature;
 
 export async function runAgent(
   input: string,
@@ -13,19 +18,19 @@ export async function runAgent(
   if (DEBUG) {
     console.log("[orchestrator] runAgent start");
     console.log(
-      "[orchestrator] model=openai:gpt-5-mini maxSteps=8 (reasoning enabled)"
+      `[orchestrator] model=openai:${MODEL_CONFIG.model} temperature=${AGENT_TEMPERATURE} maxSteps=8 (reasoning enabled)`
     );
     console.log(
       `[orchestrator] system preview="${system.slice(0, 200).replace(/\n/g, " ")}"...`
     );
   }
   const result = await generateText({
-    model: openai("gpt-5-mini"),
+    model: AGENT_MODEL,
     system,
     prompt: input,
     tools,
     maxSteps: 8,
-    temperature: 1,
+    temperature: AGENT_TEMPERATURE,
   });
   if (DEBUG) {
     console.log("[orchestrator] runAgent complete, parsing output");
@@ -36,21 +41,38 @@ export async function runAgent(
     );
   }
 
-  // Extract final output: either from text or from tool result
+  // Extract final output: prioritize tool results over text
   let parsed: unknown;
-  if (result.text && result.text.trim()) {
-    parsed = JSON.parse(result.text);
-  } else if (result.toolResults && result.toolResults.length > 0) {
-    // Extract from the last tool result (should be construct_final_response)
+  
+  // First, try to get from tool results (preferred)
+  if (result.toolResults && result.toolResults.length > 0) {
     const lastToolResult = result.toolResults[result.toolResults.length - 1];
+    if (DEBUG) {
+      console.log("[orchestrator] Using tool result from:", lastToolResult.toolName);
+    }
     parsed = lastToolResult.result;
-  } else {
-    // Fallback: get from tool's stored result
+  } 
+  // Fallback: try stored tool result
+  else {
     const lastToolResult = getLastToolResult();
     if (lastToolResult) {
+      if (DEBUG) {
+        console.log("[orchestrator] Using stored tool result");
+      }
       parsed = lastToolResult;
+    } 
+    // Last resort: try parsing text as JSON (but this should rarely happen)
+    else if (result.text && result.text.trim()) {
+      if (DEBUG) {
+        console.log("[orchestrator] Attempting to parse text as JSON (fallback)");
+      }
+      try {
+        parsed = JSON.parse(result.text);
+      } catch (e) {
+        throw new Error(`No tool result found and text is not valid JSON: ${result.text.slice(0, 100)}`);
+      }
     } else {
-      throw new Error("No output found in text or tool results");
+      throw new Error("No output found in tool results or text");
     }
   }
 
@@ -64,19 +86,19 @@ export async function runAgentStream(input: string, context: AgentContext) {
   if (DEBUG) {
     console.log("[orchestrator] runAgentStream start");
     console.log(
-      "[orchestrator] model=openai:gpt-5-mini maxSteps=8 (reasoning enabled)"
+      `[orchestrator] model=openai:${MODEL_CONFIG.model} temperature=${AGENT_TEMPERATURE} maxSteps=8 (reasoning enabled)`
     );
     console.log(
       `[orchestrator] system preview="${system.slice(0, 200).replace(/\n/g, " ")}"...`
     );
   }
   const result = await streamText({
-    model: openai("gpt-5-mini"),
+    model: AGENT_MODEL,
     system,
     prompt: input,
     tools,
     maxSteps: 8,
-    temperature: 1,
+    temperature: AGENT_TEMPERATURE,
   });
 
   // Shared state for collecting tool results (can be accessed by whoever consumes the stream)
@@ -128,7 +150,11 @@ export async function runAgentStream(input: string, context: AgentContext) {
       // Access via the result object's toolResults property
       const toolResultsFromResult =
         "toolResults" in result
-          ? (result as { toolResults?: Array<{ result: unknown }> }).toolResults
+          ? (
+              result as unknown as {
+                toolResults?: Array<{ result: unknown }>;
+              }
+            ).toolResults
           : undefined;
 
       if (DEBUG) {
