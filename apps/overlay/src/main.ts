@@ -41,7 +41,7 @@ const createWindow = (): void => {
   
   const windowWidth = 600;
   const windowHeight = 200;
-  const bottomMargin = 5; // Distance from bottom of screen
+  const bottomMargin = 2; // Distance from bottom of screen
   
   // Calculate position: centered horizontally, at bottom vertically
   const x = Math.floor((screenWidth - windowWidth) / 2);
@@ -80,7 +80,7 @@ const createWindow = (): void => {
   });
 
   // Open the DevTools.
-  // Commented out - can be opened manually with View -> Toggle Developer Tools
+  // Commented out to prevent auto-opening DevTools in development
   // if (!app.isPackaged) {
   //   mainWindow.webContents.openDevTools();
   // }

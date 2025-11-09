@@ -9,6 +9,7 @@ import { MessageList } from "./conversation/MessageList";
 import { ChatInput } from "./conversation/ChatInput";
 import { TopBar } from "./conversation/TopBar";
 import { getDisplayName } from "../lib/conversationUtils";
+import HelloSvg from "../assets/AppleHello.svg";
 
 export const ConversationView = () => {
   const [draft, setDraft] = useState("");
@@ -78,7 +79,8 @@ export const ConversationView = () => {
   };
 
   const handleSuggestionClick = (suggestion: string) => {
-    setDraft(suggestion);
+    // Append suggestion to current draft with a space
+    setDraft(draft + " " + suggestion);
     inputRef.current?.focus();
   };
 
@@ -147,9 +149,16 @@ export const ConversationView = () => {
           getDisplayName={getDisplayName}
         />
 
+        {/* Chatbox content - show Hello.svg when not in tab or agent mode */}
+        {mode !== "tab" && mode !== "conversation" && (
+          <div className="flex items-center justify-center h-full pb-10">
+            <img src={HelloSvg} alt="Hello" className="w-44 opacity-50" />
+          </div>
+        )}
+
         {/* Chatbox content - only show input area in tab mode */}
         {mode === "tab" && focusedConversation && (
-          <div className="flex flex-col justify-end h-full p-3">
+          <div className="flex flex-col h-full p-3">
             <ChatInput
               draft={draft}
               setDraft={setDraft}
@@ -166,12 +175,6 @@ export const ConversationView = () => {
         {/* Chatbox content - full conversation view (old mode) */}
         {mode === "conversation" && focusedConversation && (
           <div className="flex flex-col h-full p-3">
-            <MessageList
-              messages={messages}
-              focusedConversation={focusedConversation}
-              messagesContainerRef={messagesContainerRef}
-              showInChatbox={true}
-            />
             <ChatInput
               draft={draft}
               setDraft={setDraft}
@@ -181,6 +184,12 @@ export const ConversationView = () => {
               inputRef={inputRef}
               suggestionRefs={suggestionRefs}
               isTyping={isTyping}
+            />
+            <MessageList
+              messages={messages}
+              focusedConversation={focusedConversation}
+              messagesContainerRef={messagesContainerRef}
+              showInChatbox={true}
             />
           </div>
         )}
