@@ -19,11 +19,20 @@ export async function sendMessage(
 
   const recipient = conversation.chatIdentifier;
   
+  console.log("[TAB MODE] sendMessage called:", {
+    recipient,
+    messageText: messageText.trim(),
+    recipientLength: recipient?.length || 0,
+    messageLength: messageText.trim().length,
+    conversationGuid: conversation.guid,
+  });
+  
   try {
     const result = await window.electronAPI.sendIMessage(
       recipient,
       messageText.trim()
     );
+    console.log("[TAB MODE] sendIMessage result:", result);
     return result;
   } catch (error) {
     console.error("Error sending message:", error);
