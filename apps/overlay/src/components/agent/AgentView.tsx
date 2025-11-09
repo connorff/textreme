@@ -130,7 +130,7 @@ export const AgentView = ({
   return (
     <div className="flex h-full">
       {/* Left side - Chat history and 4 response panels (70% width) */}
-      <div className="w-[60%] border-r border-border flex flex-col">
+      <div className="w-[60%] flex flex-col">
         {/* Conversation history at the top - 70% height */}
         <div className="h-[60%] p-3 overflow-y-auto">
           <div className="space-y-1">
@@ -176,7 +176,7 @@ export const AgentView = ({
                   {response.text}
                 </div>
                 {/* Hover overlay with blur and "send" text */}
-                <div className="absolute inset-0 bg-blue-500/40 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 rounded-lg">
+                <div className="absolute inset-0 bg-blue-800/40 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 rounded-lg">
                   <span className="text-white text-sm">send</span>
                   <Send className="h-4 w-4 text-white" />
                 </div>
@@ -188,7 +188,7 @@ export const AgentView = ({
       </div>
 
       {/* Right side - Chat with agent (30% width, full height) */}
-      <div className="w-[40%] flex flex-col">
+      <div className="w-[40%] flex flex-col shadow-lg">
         {/* Chat history - takes full height */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {chatHistory.map((msg, idx) => (
@@ -212,7 +212,7 @@ export const AgentView = ({
         </div>
 
         {/* Input area - fixed at bottom */}
-        <div className="p-3 border-t shadow-sm">
+        <div className="p-3">
           <input
             type="text"
             value={userPrompt}

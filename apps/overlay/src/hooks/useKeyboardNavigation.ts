@@ -18,6 +18,8 @@ interface UseKeyboardNavigationProps {
   handleClearFocus: () => void;
   handleSuggestionClick: (suggestion: string) => void;
   handleSendMessage: () => void;
+  handleAgentClick: () => void;
+  handleTabClick: () => void;
 }
 
 export const useKeyboardNavigation = ({
@@ -36,6 +38,8 @@ export const useKeyboardNavigation = ({
   handleClearFocus,
   handleSuggestionClick,
   handleSendMessage,
+  handleAgentClick,
+  handleTabClick,
 }: UseKeyboardNavigationProps) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -43,6 +47,19 @@ export const useKeyboardNavigation = ({
       if ((e.metaKey || e.ctrlKey) && e.key === "i") {
         e.preventDefault();
         handleInboxClick();
+        return;
+      }
+
+      // Cmd+P or Ctrl+P to toggle between tab and agent mode
+      if ((e.metaKey || e.ctrlKey) && e.key === "p") {
+        e.preventDefault();
+        if (focusedConversation) {
+          if (mode === "tab") {
+            handleAgentClick();
+          } else if (mode === "agent") {
+            handleTabClick();
+          }
+        }
         return;
       }
 
@@ -115,6 +132,8 @@ export const useKeyboardNavigation = ({
     handleClearFocus,
     handleSuggestionClick,
     handleSendMessage,
+    handleAgentClick,
+    handleTabClick,
     setSelectedIndex,
     setSelectedSuggestionIndex,
   ]);

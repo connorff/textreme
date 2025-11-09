@@ -155,6 +155,8 @@ export const ConversationView = () => {
     handleClearFocus: handleClearFocusWithCleanup,
     handleSuggestionClick,
     handleSendMessage,
+    handleAgentClick,
+    handleTabClick,
   });
 
   return (
