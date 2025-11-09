@@ -10,14 +10,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
   checkDatabaseAccess: () => ipcRenderer.invoke("check-database-access"),
   getDatabaseStats: () => ipcRenderer.invoke("get-database-stats"),
   getDatabaseTables: () => ipcRenderer.invoke("get-database-tables"),
-  
+
   // Unread messages
   getUnreadMessages: (limit?: number) =>
     ipcRenderer.invoke("get-unread-messages", limit),
   getUnreadConversations: () => ipcRenderer.invoke("get-unread-conversations"),
   getConversationMessages: (chatId: string, limit?: number) =>
     ipcRenderer.invoke("get-conversation-messages", chatId, limit),
-  
+
   // System
   openSystemPreferences: () => ipcRenderer.invoke("open-system-preferences"),
 
@@ -27,6 +27,26 @@ contextBridge.exposeInMainWorld("electronAPI", {
     mode: "tab" | "agent",
     draft?: string
   ) => ipcRenderer.invoke("generate-suggestions", chatGuid, mode, draft),
+  runAgent: (
+    query: string,
+    chatGuid: string,
+    messages: Array<{
+      text: string;
+      isFromMe: boolean;
+      handleId?: string;
+      date: number;
+    }>
+  ) => ipcRenderer.invoke("run-agent", query, chatGuid, messages),
+  onAgentStream: (streamId: string, callback: (event: unknown) => void) => {
+    const channel = `agent-stream:${streamId}`;
+    const listener = (_event: Electron.IpcRendererEvent, data: unknown) => {
+      callback(data);
+    };
+    ipcRenderer.on(channel, listener);
+    return () => {
+      ipcRenderer.removeListener(channel, listener);
+    };
+  },
 
   // iMessage
   sendIMessage: (recipient: string, messageText: string) =>

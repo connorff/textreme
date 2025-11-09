@@ -10,6 +10,7 @@ export const useViewMode = ({ onModeChange }: UseViewModeProps = {}) => {
   const [mode, setMode] = useState<ViewMode>("blank");
   const [focusedConversation, setFocusedConversation] =
     useState<UnreadConversation | null>(null);
+  const [composeMode, setComposeMode] = useState<"tab" | "agent">("tab");
 
   const setModeWithCallback = useCallback(
     (newMode: ViewMode) => {
@@ -25,14 +26,14 @@ export const useViewMode = ({ onModeChange }: UseViewModeProps = {}) => {
       requestAnimationFrame(() => {
         window.electronAPI.resizeWindow(500);
       });
-    } else if (mode === "tab" || mode === "conversation") {
+    } else if (mode === "tab" || mode === "conversation" || mode === "agent") {
       setModeWithCallback("inbox");
       requestAnimationFrame(() => {
         window.electronAPI.resizeWindow(500);
       });
     } else if (mode === "inbox") {
       if (focusedConversation) {
-        setModeWithCallback("tab");
+        setModeWithCallback(composeMode);
         requestAnimationFrame(() => {
           window.electronAPI.resizeWindow(500);
         });
@@ -43,38 +44,44 @@ export const useViewMode = ({ onModeChange }: UseViewModeProps = {}) => {
         });
       }
     }
-  }, [mode, focusedConversation, setModeWithCallback]);
+  }, [mode, focusedConversation, composeMode, setModeWithCallback]);
 
   const handleTabClick = useCallback(() => {
-    if (mode === "tab") {
-      setModeWithCallback("blank");
-      requestAnimationFrame(() => {
-        window.electronAPI.resizeWindow(200);
-      });
-    } else {
-      if (focusedConversation) {
-        setModeWithCallback("tab");
-        requestAnimationFrame(() => {
-          window.electronAPI.resizeWindow(500);
-        });
-      }
+    if (!focusedConversation) {
+      return;
     }
-  }, [mode, focusedConversation, setModeWithCallback]);
+    setComposeMode("tab");
+    setModeWithCallback("tab");
+    requestAnimationFrame(() => {
+      window.electronAPI.resizeWindow(500);
+    });
+  }, [focusedConversation, setModeWithCallback]);
+
+  const handleAgentClick = useCallback(() => {
+    if (!focusedConversation) {
+      return;
+    }
+    setComposeMode("agent");
+    setModeWithCallback("agent");
+    requestAnimationFrame(() => {
+      window.electronAPI.resizeWindow(500);
+    });
+  }, [focusedConversation, setModeWithCallback]);
 
   const handleSelectConversation = useCallback(
     (conversation: UnreadConversation) => {
       setFocusedConversation(conversation);
-      setModeWithCallback("tab");
+      setModeWithCallback(composeMode);
       requestAnimationFrame(() => {
         window.electronAPI.resizeWindow(500);
       });
     },
-    [setModeWithCallback]
+    [composeMode, setModeWithCallback]
   );
 
   const handleClearFocus = useCallback(() => {
     setFocusedConversation(null);
-    if (mode === "tab" || mode === "conversation") {
+    if (mode === "tab" || mode === "conversation" || mode === "agent") {
       setModeWithCallback("blank");
       requestAnimationFrame(() => {
         window.electronAPI.resizeWindow(200);
@@ -87,10 +94,11 @@ export const useViewMode = ({ onModeChange }: UseViewModeProps = {}) => {
     setMode: setModeWithCallback,
     focusedConversation,
     setFocusedConversation,
+    composeMode,
     handleInboxClick,
     handleTabClick,
+    handleAgentClick,
     handleSelectConversation,
     handleClearFocus,
   };
 };
-

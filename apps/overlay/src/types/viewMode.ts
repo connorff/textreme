@@ -1,2 +1,1 @@
-export type ViewMode = "blank" | "inbox" | "tab" | "conversation";
-
+export type ViewMode = "blank" | "inbox" | "tab" | "conversation" | "agent";

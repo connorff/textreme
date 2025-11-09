@@ -19,8 +19,19 @@ export const UnreadMessages = ({ pollInterval = 2000 }: UnreadMessagesProps) => 
       const result = await window.electronAPI.getUnreadConversations();
       
       if (result.success) {
-        setConversations(result.conversations);
-        setTotalUnread(result.totalUnread);
+        // Filter out group chats (identifiers starting with "chat")
+        const filteredConversations = result.conversations.filter(
+          (conv) => !conv.chatIdentifier?.startsWith("chat")
+        );
+        
+        // Recalculate total unread count based on filtered conversations
+        const filteredTotalUnread = filteredConversations.reduce(
+          (sum, conv) => sum + (conv.unreadCount || 0),
+          0
+        );
+        
+        setConversations(filteredConversations);
+        setTotalUnread(filteredTotalUnread);
         setLastPollTime(new Date());
       } else {
         setError(result.error || "Failed to fetch unread messages");

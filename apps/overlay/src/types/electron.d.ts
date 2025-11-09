@@ -22,6 +22,52 @@ export interface DatabaseTable {
   type: string;
 }
 
+export interface AgentCandidate {
+  message: string;
+  reasoning: string;
+  confidence: number;
+}
+
+export interface AgentOutput {
+  candidates: AgentCandidate[];
+}
+
+export type AgentStreamEvent =
+  | {
+      type: "text-delta";
+      textDelta: string;
+    }
+  | {
+      type: "tool-call";
+      toolName: string;
+      args: unknown;
+      toolCallId?: string;
+    }
+  | {
+      type: "tool-result";
+      toolName: string;
+      result: unknown;
+      toolCallId?: string;
+    }
+  | {
+      type: "finish";
+      finishReason?: string;
+      usage?: unknown;
+    }
+  | {
+      type: "reasoning";
+      reasoning?: string;
+      text?: string;
+    }
+  | {
+      type: "complete";
+      finalOutput: AgentOutput;
+    }
+  | {
+      type: "error";
+      error: string;
+    };
+
 export interface DatabaseTablesResult {
   success: boolean;
   tables: DatabaseTable[];
@@ -120,6 +166,12 @@ export interface SuggestionResponse {
   error?: string;
 }
 
+export interface AgentRunResult {
+  success: boolean;
+  streamId?: string;
+  error?: string;
+}
+
 export interface SendMessageResult {
   success: boolean;
   error?: string;
@@ -141,6 +193,15 @@ export interface ElectronAPI {
     mode: "tab" | "agent",
     draft?: string
   ) => Promise<SuggestionResponse>;
+  runAgent: (
+    query: string,
+    chatGuid: string,
+    messages: ConversationMessage[]
+  ) => Promise<AgentRunResult>;
+  onAgentStream: (
+    streamId: string,
+    callback: (event: AgentStreamEvent) => void
+  ) => () => void;
   sendIMessage: (
     recipient: string,
     messageText: string
