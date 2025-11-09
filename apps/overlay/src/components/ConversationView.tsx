@@ -36,7 +36,7 @@ export const ConversationView = () => {
     handleClearFocus,
   } = useViewMode();
 
-  const { messages, setMessages, messagesContainerRef } = useMessages(
+  const { messages, setMessages, messagesContainerRef, scrollToBottom } = useMessages(
     focusedConversation,
     mode
   );
@@ -127,6 +127,8 @@ export const ConversationView = () => {
       // Clear the draft on success
       setDraft("");
       console.log("Message sent successfully!");
+      // Scroll to bottom after sending
+      scrollToBottom(true);
     } else {
       console.error("Failed to send message:", result.error);
       // TODO: Show error to user
@@ -202,6 +204,7 @@ export const ConversationView = () => {
               <MessageList
                 messages={messages}
                 focusedConversation={focusedConversation}
+                messagesContainerRef={messagesContainerRef}
                 agentCandidates={null}
               />
             )}

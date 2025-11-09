@@ -121,6 +121,7 @@ export interface UnreadConversation {
   unreadCount: number;
   lastActivity: number;
   unreadMessages: UnreadMessage[];
+  lastMessageText: string | null; // Text from the last message in this conversation
 }
 
 export interface UnreadConversationsResult {
@@ -144,6 +145,16 @@ export interface ConversationMessage {
   associatedMessageGuid: string | null;
   associatedMessageType: number | null;
   associatedMessageEmoji: string | null;
+  // Attachments from CLI
+  attachments?: Array<{
+    id: number;
+    guid: string;
+    mime_type: string | null;
+    uti: string | null;
+    filename: string | null;
+    total_bytes: number | null;
+    is_sticker: boolean;
+  }>;
 }
 
 export interface ConversationMessagesResult {
@@ -205,6 +216,11 @@ export interface ElectronAPI {
     recipient: string,
     messageText: string
   ) => Promise<SendMessageResult>;
+  resolveFileUrl: (filePath: string) => Promise<string | null>;
+  readFileAsDataUrl: (
+    filePath: string,
+    mimeType?: string
+  ) => Promise<string | null>;
   closeWindow: () => void;
   resizeWindow: (height: number, width?: number) => void;
 }

@@ -27,6 +27,7 @@ export const MessageList = ({
   agentCandidates,
 }: MessageListProps) => {
   const candidatesRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   const groupedMessages = groupMessagesBySender(
     messages,
@@ -52,6 +53,29 @@ export const MessageList = ({
       });
     }
   }, [agentCandidates]);
+
+  // Expose scrollToBottom functionality to parent
+  useEffect(() => {
+    if (messagesContainerRef && bottomRef.current) {
+      // Create a scrollToBottom function on the ref
+      (messagesContainerRef as any).current = {
+        scrollToBottom: (instant: boolean = false) => {
+          bottomRef.current?.scrollIntoView({
+            behavior: instant ? "auto" : "smooth",
+            block: "end",
+          });
+        },
+      };
+    }
+  }, [messagesContainerRef]);
+
+  // When focused conversation changes, jump to bottom instantly
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({
+      behavior: "auto",
+      block: "end",
+    });
+  }, [focusedConversation.guid]);
 
   if (showInChatbox) {
     // Render in chatbox without ScrollArea
@@ -88,6 +112,7 @@ export const MessageList = ({
             </div>
           </div>
         )}
+        <div ref={bottomRef} />
       </div>
     );
   }
@@ -128,6 +153,7 @@ export const MessageList = ({
               </div>
             </div>
           )}
+          <div ref={bottomRef} />
         </div>
       </ScrollArea>
     </div>
