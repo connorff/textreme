@@ -133,7 +133,7 @@ export const AgentView = ({
       <div className="w-[60%] flex flex-col">
         {/* Conversation history at the top - 70% height */}
         <div className="h-[60%] p-3 overflow-y-auto">
-          <div className="space-y-1">
+          <div className="space-y-2">
             {messages.slice(-5).map((msg, msgIdx) => (
               <div
                 key={msgIdx}
