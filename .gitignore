@@ -19,3 +19,8 @@ ml/**/target/
 
 # Vite/Electron forge temp build outputs
 apps/overlay/.vite/
+
+ml/data/config.json
+ml/data/dataset.jsonl
+
+__pycache__/
