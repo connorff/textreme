@@ -118,8 +118,8 @@ export const ConversationView = () => {
 
   const handleSendMessage = async () => {
     if (!focusedConversation || !draft.trim()) {
-      return;
-    }
+        return;
+      }
 
     const result = await sendMessage(focusedConversation, draft);
 
@@ -130,7 +130,7 @@ export const ConversationView = () => {
       
       // Refresh messages after a delay to allow DB to update
       setTimeout(() => {
-        if (focusedConversation) {
+          if (focusedConversation) {
           fetchMessages(focusedConversation.guid);
         }
       }, 1000);
@@ -166,8 +166,29 @@ export const ConversationView = () => {
     handleTabClick,
   });
 
+  // Calculate total unread count
+  const unreadCount = conversations.reduce((sum, conv) => sum + (conv.unreadCount || 0), 0);
+
   return (
-    <div className="bg-background flex flex-col h-screen overflow-hidden rounded-xl w-screen">
+    <div className="bg-background flex flex-col h-screen overflow-hidden rounded-3xl w-screen">
+      {/* Blank/Startup mode - just toolbar with unread count */}
+      {mode === "blank" && (
+        <div className="flex items-center h-full">
+          <TopBar
+            mode={mode}
+            focusedConversation={focusedConversation}
+            composeMode={composeMode}
+            onInboxClick={handleInboxClick}
+            onTabClick={handleTabClick}
+            onAgentClick={handleAgentClick}
+            onClearFocus={handleClearFocusWithCleanup}
+            onClose={handleClose}
+            getDisplayName={getDisplayName}
+            unreadCount={unreadCount}
+          />
+        </div>
+      )}
+
       {/* Agent mode - full screen layout */}
       {mode === "agent" && focusedConversation && (
         <div className="flex flex-col h-full">
@@ -193,13 +214,13 @@ export const ConversationView = () => {
                 }
               }}
             />
-          </div>
+            </div>
         </div>
       )}
 
-      {/* Non-agent modes */}
-      {mode !== "agent" && (
-        <>
+      {/* Non-agent, non-blank modes */}
+      {mode !== "agent" && mode !== "blank" && (
+        <div className="flex flex-col h-full">
           {/* Inbox area */}
           {mode === "inbox" && (
             <ConversationList
@@ -210,23 +231,25 @@ export const ConversationView = () => {
             />
           )}
 
-          {/* Conversation messages displayed above chatbox */}
+          {/* Conversation messages displayed above chatbox - 60% height */}
           {(mode === "tab" || mode === "conversation") &&
             focusedConversation && (
-              <MessageList
-                messages={messages}
-                focusedConversation={focusedConversation}
-                agentCandidates={null}
-                onMessageSent={() => {
-                  if (focusedConversation) {
-                    fetchMessages(focusedConversation.guid);
-                  }
-                }}
-              />
+              <div className="flex-[0.6] overflow-hidden">
+                <MessageList
+                  messages={messages}
+                  focusedConversation={focusedConversation}
+                  agentCandidates={null}
+                  onMessageSent={() => {
+                    if (focusedConversation) {
+                      fetchMessages(focusedConversation.guid);
+                    }
+                  }}
+                />
+              </div>
             )}
 
-          {/* Chatbox area - always visible at bottom, fixed height */}
-          <div className="flex flex-col h-[200px]">
+          {/* Chatbox area - always visible at bottom, 40% height */}
+          <div className="flex flex-col flex-[0.4]">
             <TopBar
               mode={mode}
               focusedConversation={focusedConversation}
@@ -240,11 +263,11 @@ export const ConversationView = () => {
             />
 
             {/* Chatbox content - show Hello.svg when not in tab or conversation mode */}
-            {mode !== "tab" && mode !== "conversation" && (
+            {/* {mode !== "tab" && mode !== "conversation" && (
               <div className="flex h-full items-center justify-center pb-10">
                 <img src={HelloSvg} alt="Hello" className="opacity-50 w-44" />
-              </div>
-            )}
+                  </div>
+            )} */}
 
             {/* Chatbox content - only show input area in tab mode */}
             {mode === "tab" && focusedConversation && (
@@ -258,8 +281,8 @@ export const ConversationView = () => {
                   inputRef={inputRef}
                   suggestionRefs={suggestionRefs}
                   isTyping={isTyping}
-                />
-              </div>
+                  />
+                </div>
             )}
 
             {/* Chatbox content - full conversation view (old mode) */}
@@ -286,10 +309,10 @@ export const ConversationView = () => {
                     }
                   }}
                 />
-              </div>
-            )}
           </div>
-        </>
+        )}
+          </div>
+        </div>
       )}
     </div>
   );

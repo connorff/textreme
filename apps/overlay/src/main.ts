@@ -53,8 +53,8 @@ const createWindow = (): void => {
   const { width: screenWidth, height: screenHeight } =
     screen.getPrimaryDisplay().workAreaSize;
 
-  const windowWidth = 600;
-  const windowHeight = 200;
+  const windowWidth = 500;
+  const windowHeight = 50;
   const bottomMargin = 2; // Distance from bottom of screen
 
   // Calculate position: centered horizontally, at bottom vertically
