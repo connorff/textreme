@@ -113,6 +113,12 @@ export const useKeyboardNavigation = ({
           e.preventDefault();
           handleSendMessage();
         }
+      } else if (mode === "agent") {
+        // Agent mode keyboard shortcuts
+        if (e.key === "Escape") {
+          e.preventDefault();
+          handleClearFocus();
+        }
       }
     };
 

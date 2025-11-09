@@ -191,11 +191,11 @@ export const AgentView = ({
   return (
     <div className="flex h-full">
       {/* Left side - Chat history and 4 response panels (70% width) */}
-      <div className="flex flex-col w-[60%]">
+      <div className="flex flex-col w-[60%] overflow-y-auto">
         {/* Conversation history at the top - 70% height */}
         <div className="h-[60%] overflow-y-auto p-3">
           <div className="space-y-1">
-            {messages.slice(-5).map((msg, msgIdx) => (
+            {messages.slice(-20).map((msg, msgIdx) => (
               <div
                 key={msgIdx}
                 className={`flex ${msg.isFromMe ? "justify-end" : "justify-start"}`}
@@ -209,18 +209,22 @@ export const AgentView = ({
         {/* 4 response panels below - 30% height */}
         <div className="h-[40%] p-3">
           {isLoading && responses.length === 0 ? (
-            // Show single spinner while loading (original style)
-            <div className="flex h-full items-center justify-center">
-              <div
-                style={{
-                  width: "20px",
-                  height: "20px",
-                  border: "4px solid rgba(0, 0, 0, 0.1)",
-                  borderTop: "4px solid #007aff",
-                  borderRadius: "50%",
-                  animation: "spin 1s linear infinite",
-                }}
-              ></div>
+            // Show 4 placeholder boxes with shimmer animation
+            <div className="gap-2 grid grid-cols-2 grid-rows-2 h-full">
+              {[0, 1, 2, 3].map((idx) => (
+                <div
+                  key={idx}
+                  className="relative overflow-hidden rounded-lg bg-gray-200/50"
+                >
+                  {/* Shimmer animation */}
+                  <div
+                    className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/40 to-transparent"
+                    style={{
+                      animation: "shimmer 2s infinite",
+                    }}
+                  />
+                </div>
+              ))}
             </div>
           ) : (
             // Show 4 response panels in 2 rows, 2 columns
@@ -230,10 +234,10 @@ export const AgentView = ({
                   key={idx}
                   onClick={() => handleResponseClick(response.text, idx)}
                   disabled={sendingIndex !== null || sentIndex !== null}
-                  className="border-none disabled:cursor-not-allowed flex group items-center justify-center overflow-hidden p-3 relative rounded-lg shadow-md text-left transition-all"
+                  className="border-none disabled:cursor-not-allowed flex group items-center justify-center overflow-hidden p-3 relative rounded-lg text-left transition-all"
                   style={{
                     boxShadow:
-                      "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+                      "0 2px 8px 0 rgba(0, 0, 0, 0.15)",
                   }}
                 >
                   {/* Suggested response text - no bubble */}
@@ -260,7 +264,7 @@ export const AgentView = ({
                   {sentIndex === idx && (
                     <div className="absolute animate-in backdrop-blur-sm bg-blue-500/80 duration-300 fade-in flex inset-0 items-center justify-center rounded-lg zoom-in">
                       <Check
-                        className="animate-in duration-300 h-8 text-white w-8 zoom-in"
+                        className="animate-in duration-300 h-4 text-white w-4 zoom-in"
                         strokeWidth={3}
                       />
                     </div>
