@@ -9,7 +9,11 @@ export const useConversations = () => {
     try {
       const result = await window.electronAPI.getUnreadConversations();
       if (result.success) {
-        setConversations(result.conversations.slice(0, 10));
+        // Filter out group chats (identifiers starting with "chat")
+        const filteredConversations = result.conversations.filter(
+          (conv) => !conv.chatIdentifier?.startsWith("chat")
+        );
+        setConversations(filteredConversations.slice(0, 10));
       }
     } catch (err) {
       console.error("Error fetching conversations:", err);
