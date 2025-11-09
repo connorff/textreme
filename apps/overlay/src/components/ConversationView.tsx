@@ -8,7 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent } from "@/components/ui/popover";
 import { CommandList, CommandItem } from "@/components/ui/command";
 
-type ViewMode = "blank" | "inbox" | "conversation";
+type ViewMode = "blank" | "inbox" | "tab" | "conversation";
 
 export const ConversationView = () => {
   const [mode, setMode] = useState<ViewMode>("blank");
@@ -65,7 +65,7 @@ export const ConversationView = () => {
 
   // Fetch messages when conversation is focused
   useEffect(() => {
-    if (focusedConversation && mode === "conversation") {
+    if (focusedConversation && (mode === "tab" || mode === "conversation")) {
       fetchMessages(focusedConversation.guid);
       // Focus input when conversation view opens
       setTimeout(() => {
@@ -120,7 +120,7 @@ export const ConversationView = () => {
       requestAnimationFrame(() => {
         window.electronAPI.resizeWindow(500);
       });
-    } else if (mode === "conversation") {
+    } else if (mode === "tab" || mode === "conversation") {
       // Switch to inbox but keep the focused conversation
       setMode("inbox");
       setSelectedIndex(0);
@@ -129,16 +129,36 @@ export const ConversationView = () => {
         window.electronAPI.resizeWindow(500);
       });
     } else if (mode === "inbox") {
-      // If there's a focused conversation, go back to it; otherwise go to blank
+      // If there's a focused conversation, go back to tab mode; otherwise go to blank
       if (focusedConversation) {
-        setMode("conversation");
+        setMode("tab");
+        requestAnimationFrame(() => {
+          window.electronAPI.resizeWindow(500);
+        });
       } else {
         setMode("blank");
+        requestAnimationFrame(() => {
+          window.electronAPI.resizeWindow(200);
+        });
       }
-      // Delay resize until after React renders
+    }
+  };
+
+  const handleTabClick = () => {
+    if (mode === "tab") {
+      // If already in tab mode, go to blank
+      setMode("blank");
       requestAnimationFrame(() => {
         window.electronAPI.resizeWindow(200);
       });
+    } else {
+      // Switch to tab mode
+      if (focusedConversation) {
+        setMode("tab");
+        requestAnimationFrame(() => {
+          window.electronAPI.resizeWindow(500);
+        });
+      }
     }
   };
 
@@ -146,10 +166,10 @@ export const ConversationView = () => {
     setSelectedIndex(index);
     const conversation = conversations[index];
     setFocusedConversation(conversation);
-    setMode("conversation");
-    // Delay resize until after React renders
+    setMode("tab");
+    // Stay at 500px height for tab mode
     requestAnimationFrame(() => {
-      window.electronAPI.resizeWindow(200);
+      window.electronAPI.resizeWindow(500);
     });
   };
 
@@ -158,8 +178,11 @@ export const ConversationView = () => {
     setMessages([]);
     setDraft("");
     setSuggestions([]);
-    if (mode === "conversation") {
+    if (mode === "tab" || mode === "conversation") {
       setMode("blank");
+      requestAnimationFrame(() => {
+        window.electronAPI.resizeWindow(200);
+      });
     }
   }, [mode]);
 
@@ -181,7 +204,7 @@ export const ConversationView = () => {
   // Auto-scroll selected suggestion into view
   useEffect(() => {
     if (
-      mode === "conversation" &&
+      (mode === "tab" || mode === "conversation") &&
       suggestions.length > 0 &&
       suggestionRefs.current[selectedSuggestionIndex]
     ) {
@@ -218,14 +241,20 @@ export const ConversationView = () => {
           }
         } else if (e.key === "Escape") {
           e.preventDefault();
-          // If there's a focused conversation, go back to it; otherwise go to blank
+          // If there's a focused conversation, go back to tab mode; otherwise go to blank
           if (focusedConversation) {
-            setMode("conversation");
+            setMode("tab");
+            requestAnimationFrame(() => {
+              window.electronAPI.resizeWindow(500);
+            });
           } else {
             setMode("blank");
+            requestAnimationFrame(() => {
+              window.electronAPI.resizeWindow(200);
+            });
           }
         }
-      } else if (mode === "conversation") {
+      } else if (mode === "tab" || mode === "conversation") {
         if (e.key === "Escape") {
           e.preventDefault();
           // Clear focus entirely - removes conversation pill and goes to blank
@@ -333,6 +362,99 @@ export const ConversationView = () => {
         </div>
       )}
 
+      {/* Tab mode - conversation messages displayed above chatbox */}
+      {mode === "tab" && focusedConversation && (
+        <div className="flex-1 overflow-hidden border-b border-border">
+          <ScrollArea className="h-full">
+            <div className="px-3 pt-3 pb-3">
+              {(() => {
+                // Group consecutive messages by sender
+                const groupedMessages: Array<{
+                  senderId: string;
+                  isFromMe: boolean;
+                  senderName: string;
+                  messages: ConversationMessage[];
+                }> = [];
+
+                messages.forEach((msg) => {
+                  const senderId = msg.isFromMe
+                    ? "me"
+                    : msg.handleIdentifier || "unknown";
+                  const senderName = msg.isFromMe
+                    ? "You"
+                    : msg.contactName ||
+                      focusedConversation.displayName ||
+                      getDisplayName(focusedConversation);
+
+                  const lastGroup = groupedMessages[groupedMessages.length - 1];
+                  if (
+                    lastGroup &&
+                    lastGroup.senderId === senderId &&
+                    lastGroup.isFromMe === msg.isFromMe
+                  ) {
+                    // Add to existing group
+                    lastGroup.messages.push(msg);
+                  } else {
+                    // Create new group
+                    groupedMessages.push({
+                      senderId,
+                      isFromMe: msg.isFromMe,
+                      senderName,
+                      messages: [msg],
+                    });
+                  }
+                });
+
+                return groupedMessages.map((group, groupIdx) => (
+                  <div
+                    key={groupIdx}
+                    className={`flex mb-2 ${
+                      group.isFromMe ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    <div className="flex flex-col max-w-[80%] min-w-0">
+                      {/* Sender name (only show for received messages) */}
+                      {!group.isFromMe && (
+                        <span className="text-[10px] text-muted-foreground mb-0.5 px-1">
+                          {group.senderName}
+                        </span>
+                      )}
+                      {/* Message bubbles */}
+                      <div
+                        className={`flex flex-col gap-0.5 ${
+                          group.isFromMe ? "items-end" : "items-start"
+                        }`}
+                      >
+                        {group.messages.map((msg, msgIdx) => (
+                          <div
+                            key={msg.id || msgIdx}
+                            className={`rounded-2xl px-3 py-1.5 text-xs max-w-full break-words min-w-0 ${
+                              group.isFromMe
+                                ? "bg-blue-500 text-white"
+                                : "bg-gray-100 text-foreground"
+                            }`}
+                            style={{
+                              borderRadius: group.isFromMe
+                                ? "18px 4px 18px 18px"
+                                : "4px 18px 18px 18px",
+                              wordBreak: "break-word",
+                              overflowWrap: "anywhere",
+                              hyphens: "auto",
+                            }}
+                          >
+                            {msg.text || "[No text]"}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+
       {/* Chatbox area - always visible at bottom, fixed height */}
       <div className="h-[200px] flex flex-col">
         {/* Top bar with icons and close button - draggable */}
@@ -347,13 +469,22 @@ export const ConversationView = () => {
           >
             <button
               onClick={handleInboxClick}
-              className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
+              className={`p-1.5 rounded-lg hover:bg-accent/50 transition-colors ${
+                mode === "inbox"
+                  ? "text-foreground bg-accent/50"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
               title="Inbox mode"
             >
               <Inbox className="h-4 w-4" />
             </button>
             <button
-              className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
+              onClick={handleTabClick}
+              className={`p-1.5 rounded-lg hover:bg-accent/50 transition-colors ${
+                mode === "tab"
+                  ? "text-foreground bg-accent/50"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
               title="Tab mode"
             >
               <Pencil className="h-4 w-4" />
@@ -392,8 +523,100 @@ export const ConversationView = () => {
           </button>
         </div>
 
-        {/* Chatbox content */}
-        {(mode === "conversation" || mode === "blank") && focusedConversation && (
+        {/* Chatbox content - only show input area in tab mode */}
+        {mode === "tab" && focusedConversation && (
+          <div className="flex flex-col justify-end h-full p-3">
+            {/* Autocomplete input area */}
+            <div className="relative">
+              <Popover
+                open={suggestions.length > 0 && !isTyping}
+                onOpenChange={() => {
+                  // Controlled by suggestions state
+                }}
+              >
+                {/* Input */}
+                <div className="relative min-h-[28px]">
+                  <div className="flex items-center min-h-[28px]">
+                    {/* User's typed text */}
+                    {draft ? (
+                      <span
+                        className="text-sm text-foreground font-normal"
+                        style={{
+                          fontFamily: "Inter, sans-serif",
+                          fontSize: "14px",
+                          lineHeight: "20px",
+                        }}
+                      >
+                        {draft}
+                      </span>
+                    ) : (
+                      <span
+                        className="text-sm text-muted-foreground/50 font-normal"
+                        style={{
+                          fontFamily: "Inter, sans-serif",
+                          fontSize: "14px",
+                          lineHeight: "20px",
+                        }}
+                      >
+                        Type a message...
+                      </span>
+                    )}
+                  </div>
+                  {/* Actual input for typing */}
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    className="absolute inset-0 w-full h-full bg-transparent border-none outline-none text-sm text-transparent caret-foreground"
+                    aria-label="Type a message"
+                    style={{
+                      fontFamily: "Inter, sans-serif",
+                      fontSize: "14px",
+                      lineHeight: "20px",
+                    }}
+                  />
+                </div>
+
+                {/* Autocomplete dropdown - above input */}
+                <PopoverContent
+                  side="top"
+                  align="start"
+                  sideOffset={4}
+                  className="p-0 w-auto max-w-full border-gray-100 absolute bottom-full mb-1 left-0"
+                  style={{
+                    boxShadow:
+                      "0 2px 8px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.05)",
+                  }}
+                >
+                  <CommandList className="max-h-48">
+                    {suggestions.map((suggestion, idx) => (
+                      <CommandItem
+                        key={idx}
+                        ref={(el) => {
+                          suggestionRefs.current[idx] = el;
+                        }}
+                        onClick={() => handleSuggestionClick(suggestion)}
+                        selected={idx === selectedSuggestionIndex}
+                        className="px-3 py-1.5 text-sm cursor-pointer"
+                        style={{
+                          fontFamily: "Inter, sans-serif",
+                          fontSize: "14px",
+                          lineHeight: "20px",
+                        }}
+                      >
+                        {suggestion}
+                      </CommandItem>
+                    ))}
+                  </CommandList>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+        )}
+
+        {/* Chatbox content - full conversation view (old mode) */}
+        {mode === "conversation" && focusedConversation && (
           <div className="flex flex-col h-full p-3">
             {/* Messages list - grouped by sender with bubbles */}
             <div
