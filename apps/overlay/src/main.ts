@@ -41,7 +41,7 @@ const createWindow = (): void => {
   
   const windowWidth = 600;
   const windowHeight = 200;
-  const bottomMargin = 5; // Distance from bottom of screen
+  const bottomMargin = 2; // Distance from bottom of screen
   
   // Calculate position: centered horizontally, at bottom vertically
   const x = Math.floor((screenWidth - windowWidth) / 2);

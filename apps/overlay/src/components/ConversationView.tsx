@@ -9,6 +9,7 @@ import { MessageList } from "./conversation/MessageList";
 import { ChatInput } from "./conversation/ChatInput";
 import { TopBar } from "./conversation/TopBar";
 import { getDisplayName } from "../lib/conversationUtils";
+import HelloSvg from "../assets/AppleHello.svg";
 
 export const ConversationView = () => {
   const [draft, setDraft] = useState("");
@@ -146,6 +147,13 @@ export const ConversationView = () => {
           onClose={handleClose}
           getDisplayName={getDisplayName}
         />
+
+        {/* Chatbox content - show Hello.svg when not in tab or agent mode */}
+        {mode !== "tab" && mode !== "conversation" && (
+          <div className="flex items-center justify-center h-full pb-10">
+            <img src={HelloSvg} alt="Hello" className="w-44 opacity-50" />
+          </div>
+        )}
 
         {/* Chatbox content - only show input area in tab mode */}
         {mode === "tab" && focusedConversation && (
