@@ -32,7 +32,7 @@ export const ChatInput = ({
   return (
     <div className="relative w-full">
       {/* User's typed text - always at top in black */}
-      <div className="relative min-h-[28px] mb-1">
+      <div className="relative min-h-[28px] mb-1 rounded-md px-2 py-1 focus:none focus-within:none transition-shadow">
         <div className="flex items-center min-h-[28px]">
           {draft ? (
             <span
@@ -64,7 +64,7 @@ export const ChatInput = ({
           type="text"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          className="absolute inset-0 w-full h-full bg-transparent border-none outline-none text-sm text-transparent caret-black"
+          className="absolute inset-0 w-full h-full bg-transparent border-none outline-none text-sm text-transparent caret-blue-500"
           aria-label="Type a message"
           style={{
             fontFamily: "Inter, sans-serif",

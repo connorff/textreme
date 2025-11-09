@@ -9,7 +9,7 @@ import { MessageList } from "./conversation/MessageList";
 import { ChatInput } from "./conversation/ChatInput";
 import { TopBar } from "./conversation/TopBar";
 import { getDisplayName } from "../lib/conversationUtils";
-import { AgentView } from "./AgentView";
+import { AgentView } from "./agent/AgentView";
 import type { UnreadConversation, AgentOutput } from "../types/electron";
 import HelloSvg from "../assets/AppleHello.svg";
 import { sendMessage } from "../lib/sendMessage";
@@ -159,93 +159,114 @@ export const ConversationView = () => {
 
   return (
     <div className="bg-background flex flex-col h-screen overflow-hidden rounded-xl w-screen">
-      {/* Inbox area */}
-      {mode === "inbox" && (
-        <ConversationList
-          conversations={conversations}
-          selectedIndex={selectedIndex}
-          onSelect={handleConversationSelect}
-          selectedRef={selectedRef}
-        />
+      {/* Agent mode - full screen layout */}
+      {mode === "agent" && focusedConversation && (
+        <div className="flex flex-col h-full">
+          <TopBar
+            mode={mode}
+            focusedConversation={focusedConversation}
+            composeMode={composeMode}
+            onInboxClick={handleInboxClick}
+            onTabClick={handleTabClick}
+            onAgentClick={handleAgentClick}
+            onClearFocus={handleClearFocusWithCleanup}
+            onClose={handleClose}
+            getDisplayName={getDisplayName}
+          />
+          <div className="flex-1 overflow-hidden">
+            <AgentView
+              focusedConversation={focusedConversation}
+              messages={messages}
+              onFinalOutputChange={setAgentFinalOutput}
+            />
+          </div>
+        </div>
       )}
 
-      {/* Conversation messages displayed above chatbox */}
-      {(mode === "tab" || mode === "agent" || mode === "conversation") &&
-        focusedConversation && (
-          <MessageList
-            messages={messages}
-            focusedConversation={focusedConversation}
-            agentCandidates={mode === "agent" ? agentFinalOutput : null}
-          />
-        )}
-
-      {/* Chatbox area - always visible at bottom, fixed height */}
-      <div className="flex flex-col h-[200px]">
-        <TopBar
-          mode={mode}
-          focusedConversation={focusedConversation}
-          composeMode={composeMode}
-          onInboxClick={handleInboxClick}
-          onTabClick={handleTabClick}
-          onAgentClick={handleAgentClick}
-          onClearFocus={handleClearFocusWithCleanup}
-          onClose={handleClose}
-          getDisplayName={getDisplayName}
-        />
-
-        {/* Chatbox content - show Hello.svg when not in tab or agent mode */}
-        {mode !== "tab" && mode !== "agent" && mode !== "conversation" && (
-          <div className="flex h-full items-center justify-center pb-10">
-            <img src={HelloSvg} alt="Hello" className="opacity-50 w-44" />
-          </div>
-        )}
-
-        {/* Chatbox content - only show input area in tab mode */}
-        {mode === "tab" && focusedConversation && (
-          <div className="flex flex-col h-full p-3">
-            <ChatInput
-              draft={draft}
-              setDraft={setDraft}
-              suggestions={suggestions}
-              selectedSuggestionIndex={selectedSuggestionIndex}
-              onSuggestionClick={handleSuggestionClick}
-              inputRef={inputRef}
-              suggestionRefs={suggestionRefs}
-              isTyping={isTyping}
+      {/* Non-agent modes */}
+      {mode !== "agent" && (
+        <>
+          {/* Inbox area */}
+          {mode === "inbox" && (
+            <ConversationList
+              conversations={conversations}
+              selectedIndex={selectedIndex}
+              onSelect={handleConversationSelect}
+              selectedRef={selectedRef}
             />
-          </div>
-        )}
+          )}
 
-        {mode === "agent" && focusedConversation && (
-          <AgentView
-            focusedConversation={focusedConversation}
-            messages={messages}
-            onFinalOutputChange={setAgentFinalOutput}
-          />
-        )}
+          {/* Conversation messages displayed above chatbox */}
+          {(mode === "tab" || mode === "conversation") &&
+            focusedConversation && (
+              <MessageList
+                messages={messages}
+                focusedConversation={focusedConversation}
+                agentCandidates={null}
+              />
+            )}
 
-        {/* Chatbox content - full conversation view (old mode) */}
-        {mode === "conversation" && focusedConversation && (
-          <div className="flex flex-col h-full p-3">
-            <ChatInput
-              draft={draft}
-              setDraft={setDraft}
-              suggestions={suggestions}
-              selectedSuggestionIndex={selectedSuggestionIndex}
-              onSuggestionClick={handleSuggestionClick}
-              inputRef={inputRef}
-              suggestionRefs={suggestionRefs}
-              isTyping={isTyping}
-            />
-            <MessageList
-              messages={messages}
+          {/* Chatbox area - always visible at bottom, fixed height */}
+          <div className="flex flex-col h-[200px]">
+            <TopBar
+              mode={mode}
               focusedConversation={focusedConversation}
-              messagesContainerRef={messagesContainerRef}
-              showInChatbox={true}
+              composeMode={composeMode}
+              onInboxClick={handleInboxClick}
+              onTabClick={handleTabClick}
+              onAgentClick={handleAgentClick}
+              onClearFocus={handleClearFocusWithCleanup}
+              onClose={handleClose}
+              getDisplayName={getDisplayName}
             />
+
+            {/* Chatbox content - show Hello.svg when not in tab or conversation mode */}
+            {mode !== "tab" && mode !== "conversation" && (
+              <div className="flex h-full items-center justify-center pb-10">
+                <img src={HelloSvg} alt="Hello" className="opacity-50 w-44" />
+              </div>
+            )}
+
+            {/* Chatbox content - only show input area in tab mode */}
+            {mode === "tab" && focusedConversation && (
+              <div className="flex flex-col h-full p-3">
+                <ChatInput
+                  draft={draft}
+                  setDraft={setDraft}
+                  suggestions={suggestions}
+                  selectedSuggestionIndex={selectedSuggestionIndex}
+                  onSuggestionClick={handleSuggestionClick}
+                  inputRef={inputRef}
+                  suggestionRefs={suggestionRefs}
+                  isTyping={isTyping}
+                />
+              </div>
+            )}
+
+            {/* Chatbox content - full conversation view (old mode) */}
+            {mode === "conversation" && focusedConversation && (
+              <div className="flex flex-col h-full p-3">
+                <ChatInput
+                  draft={draft}
+                  setDraft={setDraft}
+                  suggestions={suggestions}
+                  selectedSuggestionIndex={selectedSuggestionIndex}
+                  onSuggestionClick={handleSuggestionClick}
+                  inputRef={inputRef}
+                  suggestionRefs={suggestionRefs}
+                  isTyping={isTyping}
+                />
+                <MessageList
+                  messages={messages}
+                  focusedConversation={focusedConversation}
+                  messagesContainerRef={messagesContainerRef}
+                  showInChatbox={true}
+                />
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 };

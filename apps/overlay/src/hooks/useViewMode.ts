@@ -53,7 +53,8 @@ export const useViewMode = ({ onModeChange }: UseViewModeProps = {}) => {
     setComposeMode("tab");
     setModeWithCallback("tab");
     requestAnimationFrame(() => {
-      window.electronAPI.resizeWindow(500);
+      // Resize back to normal width (600px) when switching to tab mode
+      window.electronAPI.resizeWindow(500, 600);
     });
   }, [focusedConversation, setModeWithCallback]);
 
@@ -64,7 +65,8 @@ export const useViewMode = ({ onModeChange }: UseViewModeProps = {}) => {
     setComposeMode("agent");
     setModeWithCallback("agent");
     requestAnimationFrame(() => {
-      window.electronAPI.resizeWindow(500);
+      // Expand to 900px width and 500px height for agent mode
+      window.electronAPI.resizeWindow(500, 900);
     });
   }, [focusedConversation, setModeWithCallback]);
 
@@ -84,7 +86,7 @@ export const useViewMode = ({ onModeChange }: UseViewModeProps = {}) => {
     if (mode === "tab" || mode === "conversation" || mode === "agent") {
       setModeWithCallback("blank");
       requestAnimationFrame(() => {
-        window.electronAPI.resizeWindow(200);
+        window.electronAPI.resizeWindow(200, 600);
       });
     }
   }, [mode, setModeWithCallback]);
