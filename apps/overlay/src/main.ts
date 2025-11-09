@@ -833,13 +833,6 @@ async function loadContactMap(): Promise<Map<string, string>> {
     type PersonEntry = { name: string; phones: { numberRaw: string }[] };
     const contacts: PersonEntry[] = JSON.parse(jsonData);
 
-<<<<<<< Updated upstream
-    console.log(
-      `[Contacts] Parsed ${contacts.length} contacts from Contacts app`
-    );
-
-=======
->>>>>>> Stashed changes
     // Build the map with multiple normalized formats for each phone number
     for (const contact of contacts) {
       const name = contact.name.trim();
@@ -897,17 +890,6 @@ async function loadContactMap(): Promise<Map<string, string>> {
         }
       }
     }
-
-<<<<<<< Updated upstream
-    console.log(`Built contact map with ${map.size} phone number mappings`);
-
-    // Debug: Show a sample of what's in the map
-    const sampleEntries = Array.from(map.entries()).slice(0, 10);
-    console.log(`[Contacts] Built map with ${map.size} phone number entries`);
-    console.log(`[Contacts] Sample entries:`, sampleEntries);
-
-=======
->>>>>>> Stashed changes
     contactMap = map;
     contactMapLoading = false;
     return map;
