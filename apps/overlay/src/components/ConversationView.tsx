@@ -1,4 +1,4 @@
-import { Inbox, Sparkles, Sun, X, CircleUser } from "lucide-react";
+import { Inbox, Sparkles, Pencil, X, CircleUser } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
 import type {
   UnreadConversation,
@@ -356,13 +356,13 @@ export const ConversationView = () => {
               className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
               title="Tab mode"
             >
-              <Sparkles className="h-4 w-4" />
+              <Pencil className="h-4 w-4" />
             </button>
             <button
               className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
               title="Agent mode"
             >
-              <Sun className="h-4 w-4" />
+              <Sparkles className="h-4 w-4" />
             </button>
 
             {/* Conversation pill - inline with icons */}
