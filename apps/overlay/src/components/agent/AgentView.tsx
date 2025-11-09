@@ -38,19 +38,28 @@ export const AgentView = ({
   const [userPrompt, setUserPrompt] = useState("");
   const [sendingIndex, setSendingIndex] = useState<number | null>(null);
   const [sentIndex, setSentIndex] = useState<number | null>(null);
+  const [shouldScrollMessages, setShouldScrollMessages] = useState(true);
 
   const showOptions = isLoading || responses.length > 0;
   const historyRef = useRef<HTMLDivElement>(null);
   const chatHistoryRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll conversation history to bottom when messages change
+  // Reset scroll flag when conversation changes
   useEffect(() => {
-    requestAnimationFrame(() => {
-      if (historyRef.current) {
-        historyRef.current.scrollTop = historyRef.current.scrollHeight;
-      }
-    });
-  }, [messages]);
+    setShouldScrollMessages(true);
+  }, [focusedConversation.guid]);
+
+  // Auto-scroll conversation history to bottom only on initial load
+  useEffect(() => {
+    if (shouldScrollMessages && messages.length > 0) {
+      requestAnimationFrame(() => {
+        if (historyRef.current) {
+          historyRef.current.scrollTop = historyRef.current.scrollHeight;
+        }
+      });
+      setShouldScrollMessages(false);
+    }
+  }, [messages, shouldScrollMessages]);
 
   // Auto-scroll agent chat history to bottom when chatHistory changes
   useEffect(() => {
@@ -188,6 +197,9 @@ export const AgentView = ({
         // Show checkmark
         setSendingIndex(null);
         setSentIndex(index);
+
+        // Enable scrolling for the message we just sent
+        setShouldScrollMessages(true);
 
         // Refresh messages after a delay to allow DB to update
         setTimeout(() => {
