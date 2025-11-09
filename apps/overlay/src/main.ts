@@ -789,14 +789,10 @@ async function loadContactMap(): Promise<Map<string, string>> {
   contactMapLoading = true;
 
   try {
-    console.log("Loading contacts from Contacts app...");
-
     // Path to the contacts_dump binary (should be in the same directory)
     const binaryPath = app.isPackaged
       ? path.join(process.resourcesPath, "contacts_dump")
       : path.join(app.getAppPath(), "contacts_dump");
-
-    console.log(`[Contacts] Using binary at: ${binaryPath}`);
 
     // Execute the Swift binary
     const proc = spawn(binaryPath, [], {
@@ -837,10 +833,13 @@ async function loadContactMap(): Promise<Map<string, string>> {
     type PersonEntry = { name: string; phones: { numberRaw: string }[] };
     const contacts: PersonEntry[] = JSON.parse(jsonData);
 
+<<<<<<< Updated upstream
     console.log(
       `[Contacts] Parsed ${contacts.length} contacts from Contacts app`
     );
 
+=======
+>>>>>>> Stashed changes
     // Build the map with multiple normalized formats for each phone number
     for (const contact of contacts) {
       const name = contact.name.trim();
@@ -899,6 +898,7 @@ async function loadContactMap(): Promise<Map<string, string>> {
       }
     }
 
+<<<<<<< Updated upstream
     console.log(`Built contact map with ${map.size} phone number mappings`);
 
     // Debug: Show a sample of what's in the map
@@ -906,6 +906,8 @@ async function loadContactMap(): Promise<Map<string, string>> {
     console.log(`[Contacts] Built map with ${map.size} phone number entries`);
     console.log(`[Contacts] Sample entries:`, sampleEntries);
 
+=======
+>>>>>>> Stashed changes
     contactMap = map;
     contactMapLoading = false;
     return map;
@@ -1645,12 +1647,6 @@ async function executeAppleScript(
   // Use printf to pipe the script to osascript, which handles newlines and special chars better
   const command = `printf '%s\n' '${escapedScript}' | osascript`;
 
-  console.log("[DEBUG] executeAppleScript - Command length:", command.length);
-  console.log(
-    "[DEBUG] executeAppleScript - Script preview (first 200 chars):",
-    script.substring(0, 200)
-  );
-
   // Create a promise that times out
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(
@@ -1668,9 +1664,6 @@ async function executeAppleScript(
       timeoutPromise,
     ]);
 
-    console.log("[DEBUG] executeAppleScript - stdout:", stdout);
-    console.log("[DEBUG] executeAppleScript - stderr:", stderr);
-
     // Some AppleScript errors are expected (like Messages app warnings)
     // Only throw if it's a real error
     if (
@@ -1678,11 +1671,10 @@ async function executeAppleScript(
       !stderr.includes("Messages") &&
       !stderr.includes("execution error")
     ) {
-      console.error("[DEBUG] executeAppleScript - Throwing error:", stderr);
       throw new Error(stderr);
     }
   } catch (error) {
-    console.error("[DEBUG] executeAppleScript - Error:", error);
+    console.error("AppleScript execution error:", error);
     throw error;
   }
 }
@@ -1762,8 +1754,6 @@ delay 0.3
 `.trim();
 
     await executeAppleScript(appleScript);
-
-    console.log(`Marked conversation as read: ${recipient}`);
   } catch (error: any) {
     console.error("Error marking conversation as read via click:", error);
     // Don't throw - this is a best-effort operation
@@ -1774,18 +1764,8 @@ delay 0.3
 ipcMain.handle(
   "send-imessage",
   async (_event, recipient: string, messageText: string) => {
-    console.log("[DEBUG] send-imessage handler called:", {
-      recipient,
-      messageText,
-      recipientLength: recipient?.length || 0,
-      messageLength: messageText?.length || 0,
-      recipientType: typeof recipient,
-      messageTextType: typeof messageText,
-    });
-
     try {
       if (!recipient || recipient.trim() === "") {
-        console.error("[DEBUG] send-imessage - Empty recipient!");
         return {
           success: false,
           error: "Recipient is empty",
@@ -1793,7 +1773,6 @@ ipcMain.handle(
       }
 
       if (!messageText || messageText.trim() === "") {
-        console.error("[DEBUG] send-imessage - Empty messageText!");
         return {
           success: false,
           error: "Message text is empty",
@@ -1803,13 +1782,6 @@ ipcMain.handle(
       // Escape strings for AppleScript
       const escapedRecipient = escapeAppleScriptString(recipient);
       const escapedMessage = escapeAppleScriptString(messageText);
-
-      console.log("[DEBUG] send-imessage - After escaping:", {
-        escapedRecipient,
-        escapedMessage,
-        escapedRecipientLength: escapedRecipient.length,
-        escapedMessageLength: escapedMessage.length,
-      });
 
       // Build AppleScript with proper escaping
       // Use AppleScript's quoted form for safer string handling
@@ -1863,34 +1835,19 @@ delay 0.2
 `.trim();
 
       // Execute using spawn with stdin for reliable script execution
-      console.log("[DEBUG] send-imessage - About to execute AppleScript");
       await executeAppleScript(appleScript, 5000); // 5 second timeout
-      console.log("[DEBUG] send-imessage - AppleScript executed successfully");
 
       // After successfully sending, mark the conversation as read (non-blocking)
-      console.log("[DEBUG] send-imessage - Marking conversation as read");
-      markConversationAsReadViaClick(recipient).catch((error) => {
-        console.log(
-          "[DEBUG] send-imessage - Failed to mark as read (non-critical):",
-          error
-        );
+      markConversationAsReadViaClick(recipient).catch(() => {
+        // Silently fail - this is non-critical
       });
-      console.log(
-        "[DEBUG] send-imessage - Initiated mark-as-read (non-blocking)"
-      );
 
       return {
         success: true,
         message: "Message sent successfully!",
       };
     } catch (error) {
-      console.error("[DEBUG] send-imessage - AppleScript error:", error);
-      console.error("[DEBUG] send-imessage - Error details:", {
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorStack: error instanceof Error ? error.stack : undefined,
-        recipient,
-        messageText,
-      });
+      console.error("Error sending iMessage:", error);
       return {
         success: false,
         error:
