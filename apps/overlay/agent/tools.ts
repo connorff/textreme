@@ -17,8 +17,9 @@ let lastToolResult: AgentOutput | null = null;
 
 /**
  * construct_final_response
- * Uses OpenAI to generate exactly k=4 candidate responses.
- * Calls the model with 4 different temperatures for diversity.
+ * The orchestrator builds a concise construction prompt containing the
+ * relevant context and then calls this tool to produce exactly k=4
+ * candidate responses in structured form.
  */
 export const construct_final_response = tool({
   description:
@@ -47,32 +48,25 @@ export const construct_final_response = tool({
       console.log(
         `[tools] construct_final_response called (count=${constructToolInvocations})`
       );
-      console.log(`[tools] Using OpenAI model: ${MODEL_CONFIG.model}`);
+      console.log(
+        `[tools] model=openai:${MODEL_CONFIG.model} temperature=${CONSTRUCTOR_TEMPERATURE}`
+      );
       console.log(`[tools] prompt preview: "${preview}"...`);
     }
     try {
-      // Use 4 different temperatures for diversity
-      const TEMPERATURES = [0.6, 0.8, 1.0, 1.2];
-      
-      // Generate 4 candidates with different temperatures using OpenAI
-      const requests = TEMPERATURES.map(async (temperature, idx) => {
-        const result = await generateText({
-          model: CONSTRUCTOR_MODEL,
-          temperature,
-          prompt: constructionPrompt,
-        });
-        
-        return {
-          message: result.text.trim(),
-          reasoning: `Generated with temperature ${temperature}`,
-          confidence: 1.0 - (idx * 0.1), // decreasing confidence for higher temps
-        };
+      // Optimized system prompt for faster generation
+      const { object } = await generateObject({
+        model: CONSTRUCTOR_MODEL,
+        schema: AgentOutputSchema,
+        system: [
+          "Generate 4 short iMessage replies. Lowercase, no emojis, no em-dashes.",
+          "Vary tone. Each: message (text), reasoning (brief), confidence (0-1).",
+        ].join("\n"),
+        prompt: constructionPrompt,
+        temperature: CONSTRUCTOR_TEMPERATURE,
+        // Reduce maxTokens for faster generation (responses are short anyway)
+        maxTokens: 200,
       });
-      
-      const candidates = await Promise.all(requests);
-      
-      const object: AgentOutput = { candidates };
-      
       if (DEBUG) {
         console.log(
           `[tools] construct_final_response produced ${object.candidates.length} candidates`
@@ -96,7 +90,6 @@ export const construct_final_response = tool({
 /**
  * predict_recipient_responses
  * Takes the 4 candidate messages and predicts how the recipient would respond to each.
- * Uses OpenAI (gpt-4o-mini) to simulate the recipient's likely responses.
  * Returns a complete AgentOutput with predictions included.
  */
 export const predict_recipient_responses = tool({
@@ -138,7 +131,6 @@ export const predict_recipient_responses = tool({
   }): Promise<AgentOutput> {
     const DEBUG = process.env.TEXTREME_AGENT_DEBUG === "1";
     predictToolInvocations += 1;
-
     if (DEBUG) {
       console.log(
         `[tools] predict_recipient_responses called (count=${predictToolInvocations})`
@@ -150,42 +142,38 @@ export const predict_recipient_responses = tool({
 
     try {
       const predictions: string[] = [];
-      const name = recipientName || "Contact";
+      const name = recipientName || "the recipient";
 
-      // Predict response for each candidate using OpenAI
+      // Predict response for each candidate
       for (let i = 0; i < candidates.length; i++) {
         const candidate = candidates[i];
+        const prompt = [
+          `You are predicting how ${name} would respond to a message.`,
+          "",
+          "Context:",
+          conversationContext,
+          "",
+          `If you send: "${candidate.message}"`,
+          "",
+          `Predict a realistic, natural response from ${name}. Keep it SHORT (1-2 sentences).`,
+          "Match their texting style from the conversation context.",
+          "IMPORTANT: Use all lowercase, no emojis, no em-dashes.",
+        ].join("\n");
 
-        // Build prompt for prediction
-        const predictionPrompt = `${conversationContext}\nME: ${candidate.message}\n\nPredict how ${name} would respond to this message. Write only their response, no explanation.`;
+        const { text } = await generateText({
+          model: PREDICTION_MODEL,
+          prompt,
+          temperature: 0.7,
+          maxTokens: 100,
+        });
+
+        const finalText = text.trim();
+        predictions.push(finalText);
 
         if (DEBUG) {
-          console.log(`[Agent] Simulating ${name}'s response to: "${candidate.message.slice(0, 50)}..."`);
-        }
-        
-        try {
-          const result = await generateText({
-            model: PREDICTION_MODEL,
-            temperature: 0.8,
-            prompt: predictionPrompt,
-          });
-          
-          const prediction = result.text.trim();
-          
-          if (DEBUG) {
-            console.log(`[Agent] Simulated ${name}'s response: "${prediction}"`);
-            console.log(
-              `[tools] Predicted response ${i + 1}: "${prediction.slice(0, 50)}..."`
-            );
-          }
-          
-          predictions.push(prediction);
-        } catch (error) {
-          if (DEBUG) {
-            console.error(`[tools] OpenAI prediction error for candidate ${i + 1}:`, error);
-          }
-          // Use a fallback prediction on error
-          predictions.push("[Prediction unavailable]");
+          console.log(
+            `[tools] Predicted response ${i + 1}: "${finalText.slice(0, 50)}..."`
+          );
         }
       }
 

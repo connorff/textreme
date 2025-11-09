@@ -114,7 +114,7 @@ export async function runAgentStream(input: string, context: AgentContext) {
       .join("\n");
     
     // Use the conversation context directly as the construction prompt
-    // The Modal endpoint will generate the next message from "ME"
+    // OpenAI will generate the next message from "ME"
     const constructionPrompt = conversationContext;
 
     // Directly call the tools

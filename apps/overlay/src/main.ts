@@ -1615,8 +1615,12 @@ async function generateCompletionsWithModal(
         temperature: temperature.toString(),
         sender: "ME",
         input: input,
-        partial_response: partialResponse,
       });
+
+      // Only add partial_response if it's defined
+      if (partialResponse) {
+        params.append('partial_response', partialResponse);
+      }
 
       const url = `${MODAL_ENDPOINT}?${params.toString()}`;
 
