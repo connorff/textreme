@@ -26,7 +26,7 @@ export const TopBar = ({
       className="flex items-center justify-between p-3"
       style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
     >
-      {/* Top left icons */}
+      {/* Top left - inbox and conversation pill */}
       <div
         className="flex items-center gap-1.5"
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
@@ -42,32 +42,15 @@ export const TopBar = ({
         >
           <Inbox className="h-4 w-4" />
         </button>
-        <button
-          onClick={onTabClick}
-          className={`p-1.5 rounded-lg hover:bg-accent/50 transition-colors ${
-            mode === "tab"
-              ? "text-foreground bg-accent/50"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-          title="Tab mode"
-        >
-          <Pencil className="h-4 w-4" />
-        </button>
-        <button
-          className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
-          title="Agent mode"
-        >
-          <Sparkles className="h-4 w-4" />
-        </button>
 
-        {/* Conversation pill - inline with icons */}
+        {/* Conversation pill - next to inbox */}
         {focusedConversation && (
-          <div className="ml-2 px-2 py-1 rounded-md bg-primary/10 text-primary text-sm flex items-center gap-1.5">
+          <div className="px-2 py-1 rounded-md bg-blue-100 text-blue-600 text-sm flex items-center gap-1.5">
             <CircleUser className="h-4 w-4" />
             <span>{getDisplayName(focusedConversation)}</span>
             <button
               onClick={onClearFocus}
-              className="ml-0.5 p-0.5 rounded hover:bg-primary/20 transition-colors flex-shrink-0"
+              className="ml-0.5 p-0.5 rounded hover:bg-blue-200 transition-colors flex-shrink-0"
               title="Clear focus"
             >
               <X className="h-3 w-3" />
@@ -76,15 +59,45 @@ export const TopBar = ({
         )}
       </div>
 
-      {/* Top right close button */}
-      <button
-        onClick={onClose}
-        className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
-        title="Close"
+      {/* Top right - tab/agent toggle and close button */}
+      <div
+        className="flex items-center gap-1.5"
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
       >
-        <X className="h-4 w-4" />
-      </button>
+        {/* Tab/Agent mode toggle */}
+        <div className="flex items-center bg-accent/30 rounded-lg p-0.5">
+          <button
+            onClick={onTabClick}
+            className={`p-1.5 rounded-md transition-colors ${
+              mode === "tab"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            title="Tab mode"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+          <button
+            className={`p-1.5 rounded-md transition-colors ${
+              mode === "conversation"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            title="Agent mode"
+          >
+            <Sparkles className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="p-1.5 rounded-lg hover:bg-accent/50 transition-colors text-muted-foreground hover:text-foreground"
+          title="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 };

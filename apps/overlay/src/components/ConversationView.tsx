@@ -149,7 +149,7 @@ export const ConversationView = () => {
 
         {/* Chatbox content - only show input area in tab mode */}
         {mode === "tab" && focusedConversation && (
-          <div className="flex flex-col justify-end h-full p-3">
+          <div className="flex flex-col h-full p-3">
             <ChatInput
               draft={draft}
               setDraft={setDraft}
@@ -166,12 +166,6 @@ export const ConversationView = () => {
         {/* Chatbox content - full conversation view (old mode) */}
         {mode === "conversation" && focusedConversation && (
           <div className="flex flex-col h-full p-3">
-            <MessageList
-              messages={messages}
-              focusedConversation={focusedConversation}
-              messagesContainerRef={messagesContainerRef}
-              showInChatbox={true}
-            />
             <ChatInput
               draft={draft}
               setDraft={setDraft}
@@ -181,6 +175,12 @@ export const ConversationView = () => {
               inputRef={inputRef}
               suggestionRefs={suggestionRefs}
               isTyping={isTyping}
+            />
+            <MessageList
+              messages={messages}
+              focusedConversation={focusedConversation}
+              messagesContainerRef={messagesContainerRef}
+              showInChatbox={true}
             />
           </div>
         )}

@@ -75,12 +75,12 @@ export const ChatInput = ({
           />
         </div>
 
-        {/* Autocomplete dropdown - above input */}
+        {/* Autocomplete dropdown - below input */}
         <PopoverContent
-          side="top"
+          side="bottom"
           align="start"
           sideOffset={4}
-          className="p-0 w-auto max-w-full border-gray-100 absolute bottom-full mb-1 left-0"
+          className="p-0 w-auto max-w-full border-gray-100 absolute top-full mt-1 left-0"
           style={{
             boxShadow:
               "0 2px 8px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.05)",
