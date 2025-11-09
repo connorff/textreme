@@ -20,10 +20,10 @@ export const useConversations = () => {
     }
   }, []);
 
-  // Start polling on mount
+  // Start polling on mount - poll every 1 second for fast updates
   useEffect(() => {
     fetchConversations();
-    const interval = setInterval(fetchConversations, 3000);
+    const interval = setInterval(fetchConversations, 1000);
     return () => clearInterval(interval);
   }, [fetchConversations]);
 

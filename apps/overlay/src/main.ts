@@ -1695,6 +1695,90 @@ function escapeAppleScriptString(str: string): string {
   return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
+// Helper function to mark conversation as read by clicking on it in Messages
+async function markConversationAsReadViaClick(
+  recipient: string
+): Promise<void> {
+  try {
+    const escapedRecipient = escapeAppleScriptString(recipient);
+
+    const appleScript = `
+set recipient to "${escapedRecipient}"
+
+set h to ""
+
+-- Try to find contact by name first
+try
+  tell application "Contacts"
+    set p to first person whose name is recipient
+    if (count of phones of p) > 0 then
+      set h to value of first phone of p
+    else if (count of emails of p) > 0 then
+      set h to value of first email of p
+    end if
+  end tell
+on error
+  -- If not found as contact name, assume recipient is already phone/email
+  set h to recipient
+end try
+
+if h is "" then
+  set h to recipient
+end if
+
+-- Activate Messages and click on the conversation to mark it as read
+tell application "Messages"
+  activate
+  delay 0.5
+end tell
+
+tell application "System Events"
+  tell process "Messages"
+    -- Wait for Messages window to be ready
+    repeat until exists window 1
+      delay 0.1
+    end repeat
+    
+    -- Try to find and click the conversation in the sidebar
+    try
+      -- Look for the conversation row that contains the recipient identifier
+      set conversationRows to rows of table 1 of scroll area 1 of splitter group 1 of window 1
+      repeat with aRow in conversationRows
+        try
+          set rowText to value of static text 1 of aRow
+          if rowText contains h or rowText contains recipient then
+            -- Click on the row to open the conversation and mark as read
+            click aRow
+            delay 0.2
+            exit repeat
+          end if
+        end try
+      end repeat
+    on error errMsg
+      -- If UI structure is different, try alternative approach
+      log "Could not find conversation row: " & errMsg
+    end try
+  end tell
+end tell
+
+-- Hide Messages app again
+tell application "System Events"
+  set visible of process "Messages" to false
+end tell
+
+delay 0.3
+`.trim();
+
+    const command = `echo ${JSON.stringify(appleScript)} | osascript`;
+    await execAsync(command);
+
+    console.log(`Marked conversation as read: ${recipient}`);
+  } catch (error: any) {
+    console.error("Error marking conversation as read via click:", error);
+    // Don't throw - this is a best-effort operation
+  }
+}
+
 // AppleScript execution handler
 ipcMain.handle(
   "send-imessage",
@@ -1754,6 +1838,9 @@ end tell
       ) {
         throw new Error(stderr);
       }
+
+      // After successfully sending, mark the conversation as read
+      await markConversationAsReadViaClick(recipient);
 
       return {
         success: true,

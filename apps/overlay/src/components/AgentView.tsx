@@ -54,6 +54,15 @@ export const AgentView = ({
     setQuery("");
   }, [focusedConversation.guid, reset]);
 
+  // Auto-run agent with default query when view first loads
+  useEffect(() => {
+    // Only run if not already running and no previous history
+    if (!state.isRunning && state.history.length === 0 && !state.error) {
+      const defaultQuery = "Suggest natural replies to the last message";
+      runAgent(defaultQuery);
+    }
+  }, [focusedConversation.guid, state.isRunning, state.history.length, state.error, runAgent]); // Re-run when conversation changes
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim() || state.isRunning) return;
@@ -63,37 +72,37 @@ export const AgentView = ({
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Agent interface - compact for chatbox area */}
-      <div className="flex flex-col justify-end h-full p-3 gap-2 bg-background overflow-hidden">
+      <div className="bg-background flex flex-col gap-2 h-full justify-end overflow-hidden p-3">
         {/* Scrollable content area - grows from top, pushes input down */}
         <ScrollArea className="flex-1 min-h-0">
           <div className="flex flex-col gap-2 pr-2">
             {/* Agent History */}
             {state.history.length > 0 && (
               <div className="space-y-2">
-                <div className="text-xs font-medium text-muted-foreground">
+                <div className="font-medium text-muted-foreground text-xs">
                   History
                 </div>
                 {state.history.map((item, idx) => (
                   <div
                     key={idx}
-                    className="border border-border rounded-md p-2"
+                    className="border border-border p-2 rounded-md"
                   >
-                    <div className="text-xs text-muted-foreground mb-1">
+                    <div className="mb-1 text-muted-foreground text-xs">
                       Query:
                     </div>
-                    <div className="text-xs text-foreground mb-2">
+                    <div className="mb-2 text-foreground text-xs">
                       {item.query}
                     </div>
                     {item.output && (
                       <>
-                        <div className="text-xs text-muted-foreground mb-1">
+                        <div className="mb-1 text-muted-foreground text-xs">
                           Candidates:
                         </div>
                         <div className="space-y-1">
                           {item.output.candidates.map((candidate, cIdx) => (
                             <div
                               key={cIdx}
-                              className="text-xs bg-accent/30 rounded px-2 py-1"
+                              className="bg-accent/30 px-2 py-1 rounded text-xs"
                             >
                               {candidate.message}
                             </div>
@@ -108,7 +117,7 @@ export const AgentView = ({
 
             {/* Error display */}
             {state.error && (
-              <div className="px-2 py-1.5 text-xs text-destructive bg-destructive/10 rounded-md border border-destructive/20">
+              <div className="bg-destructive/10 border border-destructive/20 px-2 py-1.5 rounded-md text-destructive text-xs">
                 {state.error}
               </div>
             )}
@@ -120,12 +129,12 @@ export const AgentView = ({
                   <StreamTimelineItemComponent key={item.id} item={item} />
                 ))}
                 {state.currentReasoning && (
-                  <div className="border border-border rounded-md p-2 bg-accent/20">
-                    <div className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
-                      <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                  <div className="bg-accent/20 border border-border p-2 rounded-md">
+                    <div className="flex font-medium gap-1 items-center mb-1 text-muted-foreground text-xs">
+                      <div className="animate-pulse bg-blue-500 h-1.5 rounded-full w-1.5" />
                       Reasoning...
                     </div>
-                    <div className="text-xs text-foreground whitespace-pre-wrap">
+                    <div className="text-foreground text-xs whitespace-pre-wrap">
                       {state.currentReasoning}
                     </div>
                   </div>
@@ -136,7 +145,7 @@ export const AgentView = ({
         </ScrollArea>
 
         {/* Query input - textarea with send button (grows bottom-up like ChatInput) */}
-        <form onSubmit={handleSubmit} className="relative w-full flex-shrink-0">
+        <form onSubmit={handleSubmit} className="flex-shrink-0 relative w-full">
           <textarea
             ref={inputRef}
             value={query}
@@ -149,9 +158,9 @@ export const AgentView = ({
                 }
               }
             }}
-            placeholder="Ask the agent to compose a reply..."
+            placeholder="Refine suggestions or ask for something specific..."
             disabled={state.isRunning}
-            className="w-full bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground/50 resize-none pr-10 disabled:opacity-50"
+            className="bg-transparent border-none disabled:opacity-50 outline-none placeholder:text-muted-foreground/50 pr-10 resize-none text-foreground text-sm w-full"
             style={{
               fontFamily: "Inter, sans-serif",
               fontSize: "14px",
@@ -162,10 +171,10 @@ export const AgentView = ({
             rows={1}
           />
           {/* Send button - bottom right */}
-          <div className="absolute bottom-0 right-0 p-1">
+          <div className="absolute bottom-0 p-1 right-0">
             {state.isRunning ? (
-              <div className="h-6 w-6 flex items-center justify-center">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              <div className="flex h-6 items-center justify-center w-6">
+                <Loader2 className="animate-spin h-3.5 text-muted-foreground w-3.5" />
               </div>
             ) : (
               <Button
@@ -173,7 +182,7 @@ export const AgentView = ({
                 disabled={!query.trim()}
                 size="icon"
                 variant="ghost"
-                className="h-6 w-6 rounded-full"
+                className="h-6 rounded-full w-6"
               >
                 <Send className="h-3.5 w-3.5" />
               </Button>
@@ -188,11 +197,11 @@ export const AgentView = ({
 function StreamTimelineItemComponent({ item }: { item: StreamTimelineItem }) {
   if (item.type === "reasoning") {
     return (
-      <div className="border border-border rounded-md p-2 bg-accent/10">
-        <div className="text-xs font-medium text-muted-foreground mb-1">
+      <div className="bg-accent/10 border border-border p-2 rounded-md">
+        <div className="font-medium mb-1 text-muted-foreground text-xs">
           Reasoning
         </div>
-        <div className="text-xs text-foreground whitespace-pre-wrap">
+        <div className="text-foreground text-xs whitespace-pre-wrap">
           {item.content}
         </div>
       </div>
@@ -201,8 +210,8 @@ function StreamTimelineItemComponent({ item }: { item: StreamTimelineItem }) {
 
   if (item.type === "tool-call") {
     return (
-      <div className="border border-border rounded-md p-2 bg-blue-50 dark:bg-blue-950/20">
-        <div className="text-xs font-medium text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+      <div className="bg-blue-50 border border-border dark:bg-blue-950/20 p-2 rounded-md">
+        <div className="dark:text-blue-400 flex font-medium gap-1.5 items-center text-blue-600 text-xs">
           <Wrench className="h-3 w-3" />
           {item.content}
         </div>
@@ -212,8 +221,8 @@ function StreamTimelineItemComponent({ item }: { item: StreamTimelineItem }) {
 
   if (item.type === "tool-result") {
     return (
-      <div className="border border-border rounded-md p-2 bg-green-50 dark:bg-green-950/20">
-        <div className="text-xs font-medium text-green-600 dark:text-green-400 flex items-center gap-1.5">
+      <div className="bg-green-50 border border-border dark:bg-green-950/20 p-2 rounded-md">
+        <div className="dark:text-green-400 flex font-medium gap-1.5 items-center text-green-600 text-xs">
           <CheckCircle2 className="h-3 w-3" />
           {item.content}
         </div>
