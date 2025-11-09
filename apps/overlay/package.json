@@ -5,11 +5,12 @@
   "description": "Textreme overlay Electron app",
   "main": ".vite/build/main.js",
   "scripts": {
+    "compile-contacts": "swiftc contacts_dump.swift -o contacts_dump 2>/dev/null || echo 'Warning: Swift compiler not available'",
     "copy-binary": "mkdir -p .vite/build && cp contacts_dump .vite/build/contacts_dump 2>/dev/null || true",
     "build-cli": "cd ../../ml/imessage_query && cargo build --release",
     "prebuild": "npm run build-cli",
-    "start": "npm run copy-binary && npm run build-cli && electron-forge start",
-    "dev": "npm run copy-binary && npm run build-cli && electron-forge start",
+    "start": "npm run compile-contacts && npm run copy-binary && npm run build-cli && electron-forge start",
+    "dev": "npm run compile-contacts && npm run copy-binary && npm run build-cli && electron-forge start",
     "build": "electron-forge package",
     "package": "electron-forge package",
     "make": "electron-forge make",
@@ -65,6 +66,7 @@
     "electron-squirrel-startup": "^1.0.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "sqlite3": "^5.1.7",
     "zod": "^3.23.8"
   }
 }

@@ -772,8 +772,37 @@ function normalizePhoneNumber(phone: string): string {
 }
 
 /**
- * Load all contacts from Contacts app via Swift CLI
- * Uses native Contacts framework - much faster than AppleScript
+ * Find all AddressBook databases (same as orchestrate.py find_addressbook_dbs)
+ */
+function findAddressBookDbs(): string[] {
+  const pattern = path.join(
+    os.homedir(),
+    'Library/Application Support/AddressBook/Sources/*/AddressBook-v22.abcddb'
+  );
+  
+  // Use glob pattern matching
+  const matches: string[] = [];
+  try {
+    const sourcesDir = path.join(os.homedir(), 'Library/Application Support/AddressBook/Sources');
+    if (fs.existsSync(sourcesDir)) {
+      const sources = fs.readdirSync(sourcesDir);
+      for (const source of sources) {
+        const dbPath = path.join(sourcesDir, source, 'AddressBook-v22.abcddb');
+        if (fs.existsSync(dbPath)) {
+          matches.push(dbPath);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error finding AddressBook databases:', error);
+  }
+  
+  return matches;
+}
+
+/**
+ * Load all contacts from AddressBook database directly (same as orchestrate.py)
+ * Uses SQLite to query ZABCDPHONENUMBER and ZABCDRECORD tables
  */
 async function loadContactMap(): Promise<Map<string, string>> {
   // Return existing map if already loaded
@@ -789,122 +818,108 @@ async function loadContactMap(): Promise<Map<string, string>> {
   contactMapLoading = true;
 
   try {
-    // Path to the contacts_dump binary (should be in the same directory)
-    const binaryPath = app.isPackaged
-      ? path.join(process.resourcesPath, "contacts_dump")
-      : path.join(app.getAppPath(), "contacts_dump");
-
-    // Execute the Swift binary
-    const proc = spawn(binaryPath, [], {
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-
-    proc.stdout.on("data", (data) => {
-      stdout += data.toString();
-    });
-
-    proc.stderr.on("data", (data) => {
-      stderr += data.toString();
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      proc.on("close", (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(
-            new Error(`contacts_dump exited with code ${code}: ${stderr}`)
-          );
-        }
-      });
-
-      proc.on("error", (err) => {
-        reject(err);
-      });
-    });
-
-    // Parse JSON output
-    const jsonData = stdout.trim();
+    const addressbookPaths = findAddressBookDbs();
+    
+    if (addressbookPaths.length === 0) {
+      contactMap = new Map();
+      contactMapLoading = false;
+      return contactMap;
+    }
+    
     const map = new Map<string, string>();
-
-    type PersonEntry = { name: string; phones: { numberRaw: string }[] };
-    const contacts: PersonEntry[] = JSON.parse(jsonData);
-
-    // Build the map with multiple normalized formats for each phone number
-    for (const contact of contacts) {
-      const name = contact.name.trim();
-      if (!name || name === "Unknown") continue;
-
-      for (const phoneEntry of contact.phones) {
-        const phoneRaw = phoneEntry.numberRaw;
-        if (!phoneRaw) continue;
-
-        const normalized = normalizePhoneNumber(phoneRaw);
-
-        // Store many different format variations to maximize matching
-        const variants = new Set<string>();
-
-        // Add the normalized version
-        variants.add(normalized);
-
-        // Add without leading +
-        if (normalized.startsWith("+")) {
-          variants.add(normalized.slice(1));
-        }
-
-        // Add without +1 prefix
-        if (normalized.startsWith("+1")) {
-          variants.add(normalized.slice(2));
-        }
-
-        // Add without 1 prefix
-        if (normalized.startsWith("1") && normalized.length === 11) {
-          variants.add(normalized.slice(1));
-        }
-
-        // Add last 10 digits (US phone number)
-        if (normalized.length >= 10) {
-          variants.add(normalized.slice(-10));
-        }
-
-        // Add last 7 digits (local number)
-        if (normalized.length >= 7) {
-          variants.add(normalized.slice(-7));
-        }
-
-        // Add with +1 prefix if not present and looks like US number
-        if (!normalized.startsWith("+") && normalized.length === 10) {
-          variants.add("+1" + normalized);
-          variants.add("1" + normalized);
-        }
-
-        // Store all variants
-        for (const variant of variants) {
-          if (variant.length >= 7) {
-            // Only store variants with reasonable length
-            map.set(variant, name);
+    
+    // Import sqlite3 dynamically
+    const sqlite3 = require('sqlite3');
+    
+    for (const dbPath of addressbookPaths) {
+      try {
+        // Query the AddressBook database (same as orchestrate.py get_contact_name)
+        const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY);
+        
+        const rows = await new Promise<any[]>((resolve, reject) => {
+          db.all(`
+            SELECT c.ZFIRSTNAME, c.ZLASTNAME, p.ZFULLNUMBER
+            FROM ZABCDPHONENUMBER p
+            JOIN ZABCDRECORD c ON p.ZOWNER = c.Z_PK
+          `, (err: any, rows: any[]) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+          });
+        });
+        
+        db.close();
+        
+        // Process each contact-phone pair (same as orchestrate.py)
+        for (const row of rows) {
+          const firstName = row.ZFIRSTNAME || '';
+          const lastName = row.ZLASTNAME || '';
+          const fullName = `${firstName} ${lastName}`.trim();
+          const phoneRaw = row.ZFULLNUMBER;
+          
+          if (!fullName || !phoneRaw) continue;
+          
+          const normalized = normalizePhoneNumber(phoneRaw);
+          
+          // Store many different format variations to maximize matching (same as orchestrate.py)
+          const variants = new Set<string>();
+          
+          // Add the normalized version
+          variants.add(normalized);
+          
+          // Add without leading +
+          if (normalized.startsWith("+")) {
+            variants.add(normalized.slice(1));
+          }
+          
+          // Add without +1 prefix
+          if (normalized.startsWith("+1")) {
+            variants.add(normalized.slice(2));
+          }
+          
+          // Add without 1 prefix
+          if (normalized.startsWith("1") && normalized.length === 11) {
+            variants.add(normalized.slice(1));
+          }
+          
+          // Add last 10 digits (US phone number)
+          if (normalized.length >= 10) {
+            variants.add(normalized.slice(-10));
+          }
+          
+          // Add last 7 digits (local number)
+          if (normalized.length >= 7) {
+            variants.add(normalized.slice(-7));
+          }
+          
+          // Add with +1 prefix if not present and looks like US number
+          if (!normalized.startsWith("+") && normalized.length === 10) {
+            variants.add("+1" + normalized);
+            variants.add("1" + normalized);
+          }
+          
+          // Store all variants
+          for (const variant of variants) {
+            if (variant.length >= 7) {
+              // Only store variants with reasonable length
+              map.set(variant, fullName);
+            }
           }
         }
+        
+      } catch (error) {
+        console.error(`Error querying AddressBook database:`, error);
       }
     }
+    
     contactMap = map;
     contactMapLoading = false;
     return map;
   } catch (error: any) {
     console.error("Error loading contacts:", error);
-    console.error("Error details:", {
-      message: error.message,
-      code: error.code,
-      signal: error.signal,
-    });
     // Return empty map on error
     contactMap = new Map();
-    return contactMap;
-  } finally {
     contactMapLoading = false;
+    return contactMap;
   }
 }
 
@@ -1518,70 +1533,100 @@ ipcMain.handle(
 );
 
 /**
- * Generate text completions using Vercel AI SDK with structured output
+ * Generate text completions using custom Modal endpoint
  */
-async function generateCompletionsWithAI(
-  lastMessages: Array<{ text: string | null; isFromMe: boolean }>,
-  draft: string
+async function generateCompletionsWithModal(
+  lastMessages: Array<{ text: string | null; isFromMe: boolean; contactName: string | null }>,
+  draft: string,
+  displayName: string | null,
+  chatIdentifier: string
 ): Promise<string[]> {
-  // Build conversation context
-  const contextLines = lastMessages
-    .slice(-10) // Last 10 messages for context
-    .map((msg) => {
-      const sender = msg.isFromMe ? "You" : "Them";
-      const text = msg.text || "[No text]";
-      return `${sender}: ${text}`;
+  // Ensure contact map is loaded before lookup (same as orchestrate.py does)
+  await loadContactMap();
+  
+  // Resolve contact name using the same method as orchestrate.py
+  // Priority: displayName from DB -> lookupContactName(chatIdentifier) -> chatIdentifier itself
+  let contactName = displayName;
+  if (!contactName) {
+    contactName = lookupContactName(chatIdentifier);
+  }
+  if (!contactName) {
+    // Fallback to chatIdentifier itself (phone number or email)
+    contactName = chatIdentifier;
+  }
+  
+  // Format messages in training format: "{index} {sender}: [text] {content}"
+  const formattedMessages = lastMessages
+    .map((msg, idx) => {
+      const sender = msg.isFromMe ? "ME" : contactName;
+      const text = msg.text || "";
+      // Escape newlines for JSONL format (same as extract_training_pairs.py line 577)
+      const escapedText = text.replace(/\n/g, '\\n');
+      return `${idx} ${sender}: [text] ${escapedText}`;
     });
 
-  const context = contextLines.join("\n");
+  const input = formattedMessages.join('\n');
+  
+  // Prepare partial response if draft exists
+  const partialResponse = draft ? `[text] ${draft}` : undefined;
 
-  const systemPrompt = `You are an autocomplete system for iMessage. Given a conversation context and partial text the user is typing, predict 3 different ways the user might complete their message.
+  // Modal endpoint configuration
+  const MODAL_ENDPOINT = "https://connorff--textreme-inference-web-dev.modal.run";
+  const RUN_NAME = process.env.TEXTREME_MODEL_RUN_NAME || "textreme-2025-11-09-14-13-20-fe40";
+  const TEMPERATURES = [0.4, 0.7, 1.0];
 
-Rules:
-- Generate ONLY the continuation text that comes AFTER the user's partial input
-- Do NOT repeat the user's input text - only provide what comes next
-- Ensure proper grammar: add punctuation (?, !, .) if the draft needs it before continuing
-- Use proper capitalization: lowercase if continuing same sentence, uppercase if starting new sentence
-- Match the user's style and tone from the conversation
-- Keep completions short and natural (typically a few words to one sentence)
-- NO EMOJIS - plain text only
-- The continuation should flow naturally from where the user stopped typing
-- Provide diverse options (different tones, lengths, or approaches)
-
-Examples:
-If user typed: "I don't care about"
-Good completions: ["your opinion", "what they think", "that right now"]
-
-If user typed: "who asked"
-Good completions: ["?", " lol", "? That's totally unnecessary"]
-
-If user typed: "that's"
-Good completions: [" so expensive", " ridiculous", " way too much"]
-
-Bad completions: ["I don't care about your opinion", "Who asked lol", "That's expensive"]`;
-
-  const userPrompt = `Conversation context:
-${context}
-
-User is typing: "${draft}"
-
-Generate 3 different ways to complete this message. Return ONLY the text that continues after "${draft}".`;
+  console.log("Request parameters:", {
+    run_name: RUN_NAME,
+    sender: "ME",
+    input: input,
+    partial_response: partialResponse,
+    temperatures: TEMPERATURES,
+  });
 
   try {
-    console.log("Making request to OpenAI");
-    const { object } = await generateObject({
-      model: openai("gpt-5-nano"),
-      schema: z.object({
-        completions: z.array(z.string()).length(3),
-      }),
-      system: systemPrompt,
-      prompt: userPrompt,
-      temperature: 1.0,
+    
+    // Make three parallel requests with different temperatures
+    const requests = TEMPERATURES.map(async (temperature) => {
+      const params = new URLSearchParams({
+        run_name: RUN_NAME,
+        temperature: temperature.toString(),
+        sender: "ME",
+        input: input,
+      });
+
+      if (partialResponse) {
+        params.append('partial_response', partialResponse);
+      }
+
+      const url = `${MODAL_ENDPOINT}?${params.toString()}`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'text/plain',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Modal API returned ${response.status}: ${response.statusText}`);
+      }
+
+      const text = await response.text();
+      
+      // Parse response: should be in format "[text] {content}"
+      const match = text.match(/\[text\]\s*(.*?)(?:%|$)/);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+      
+      // Fallback: return the whole response if parsing fails
+      return text.trim();
     });
 
-    return object.completions;
+    const completions = await Promise.all(requests);
+    return completions;
   } catch (error) {
-    console.error("AI SDK error:", error);
+    console.error("Modal API error:", error);
     throw error;
   }
 }
@@ -1591,11 +1636,13 @@ ipcMain.handle(
   "generate-completions",
   async (
     _event,
-    messages: Array<{ text: string | null; isFromMe: boolean }>,
-    draft: string
+    messages: Array<{ text: string | null; isFromMe: boolean; contactName: string | null }>,
+    draft: string,
+    displayName: string | null,
+    chatIdentifier: string
   ) => {
     try {
-      const completions = await generateCompletionsWithAI(messages, draft);
+      const completions = await generateCompletionsWithModal(messages, draft, displayName, chatIdentifier);
 
       return {
         success: true,

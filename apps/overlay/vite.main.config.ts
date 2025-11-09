@@ -4,7 +4,17 @@ import { defineConfig } from "vite";
 export default defineConfig({
   build: {
     rollupOptions: {
-      external: ["node:sqlite"],
+      external: [
+        "node:sqlite",
+        "sqlite3",
+        "ai",
+        "@ai-sdk/openai",
+        "@textreme/schema",
+        "@textreme/client",
+        "dotenv",
+        "dotenv/config",
+        "zod",
+      ],
     },
   },
 });

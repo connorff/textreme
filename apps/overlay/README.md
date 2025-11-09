@@ -8,6 +8,14 @@ Set `OPENAI_API_KEY` in your environment before running the agent:
 export OPENAI_API_KEY=sk-...
 ```
 
+### Modal Model Configuration (Autocomplete)
+
+The autocomplete feature uses a custom Modal endpoint. Configure the model run name:
+
+```bash
+export TEXTREME_MODEL_RUN_NAME=textreme-2025-11-09-14-13-20-fe40
+```
+
 You can also create an `.env` in `apps/overlay/` if your shell loads it.
 
 ## Demo script

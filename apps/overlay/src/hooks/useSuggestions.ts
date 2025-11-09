@@ -49,12 +49,21 @@ export const useSuggestions = (
         const messageContext = messages.map((msg) => ({
           text: msg.text,
           isFromMe: msg.isFromMe,
+          contactName: msg.contactName,
         }));
 
-        // Call the AI completion API
+        // Get contact name and identifier from focused conversation
+        const displayName = focusedConversation.displayName || 
+          messages.find(m => !m.isFromMe)?.contactName || 
+          null;
+        const chatIdentifier = focusedConversation.chatIdentifier;
+
+        // Call the AI completion API (backend will resolve contact name from chatIdentifier)
         const result = await window.electronAPI.generateCompletions(
           messageContext,
-          draft
+          draft,
+          displayName,
+          chatIdentifier
         );
 
         if (result.success && result.suggestions.length > 0) {

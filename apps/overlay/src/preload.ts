@@ -27,9 +27,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // Suggestions
   generateCompletions: (
-    messages: Array<{ text: string | null; isFromMe: boolean }>,
-    draft: string
-  ) => ipcRenderer.invoke("generate-completions", messages, draft),
+    messages: Array<{ text: string | null; isFromMe: boolean; contactName: string | null }>,
+    draft: string,
+    displayName: string | null,
+    chatIdentifier: string
+  ) => ipcRenderer.invoke("generate-completions", messages, draft, displayName, chatIdentifier),
   runAgent: (
     query: string,
     chatGuid: string,
