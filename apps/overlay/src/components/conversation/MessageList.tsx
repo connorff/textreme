@@ -138,7 +138,7 @@ export const MessageList = ({
 
   // Render in expandable area with ScrollArea
   return (
-    <div className="flex-1 overflow-hidden border-b border-border">
+    <div className="h-full overflow-hidden border-b border-border">
       <ScrollArea className="h-full">
         <div className="px-3 pt-3 pb-3">
           {groupedMessages.map((group, groupIdx) => (
