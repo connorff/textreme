@@ -15,10 +15,10 @@ export async function runAgent(
 ): Promise<AgentOutput> {
   const DEBUG = process.env.TEXTREME_AGENT_DEBUG === "1";
   const system = buildInstructions(context);
-  // Allow maxSteps to be configured via environment variable (default: 2 for speed)
+  // Allow maxSteps to be configured via environment variable (default: 3 for construct + predict)
   const maxSteps = process.env.TEXTREME_AGENT_MAX_STEPS
     ? parseInt(process.env.TEXTREME_AGENT_MAX_STEPS, 10)
-    : 2;
+    : 3;
   if (DEBUG) {
     console.log("[orchestrator] runAgent start");
     console.log(
@@ -113,9 +113,20 @@ Request: ${input}
 
 Generate 4 short, lowercase replies (no emojis, no em-dashes). Vary tone.`;
 
-    // Directly call the tool
-    const { construct_final_response } = await import("./tools");
-    const toolResult = await construct_final_response.execute({ constructionPrompt });
+    // Directly call the tools
+    const { construct_final_response, predict_recipient_responses } = await import("./tools");
+    const constructResult = await construct_final_response.execute({ constructionPrompt });
+    
+    // Call prediction tool with the candidates
+    const finalResult = await predict_recipient_responses.execute({
+      candidates: constructResult.candidates.map(c => ({
+        message: c.message,
+        reasoning: c.reasoning,
+        confidence: c.confidence,
+      })),
+      conversationContext,
+      recipientName: name,
+    });
     
     // Return a mock stream that immediately yields the result
     // Match the stream format expected by the frontend
@@ -124,17 +135,33 @@ Generate 4 short, lowercase replies (no emojis, no em-dashes). Vary tone.`;
         // Empty text stream for fast mode
       })(),
       fullStream: (async function* () {
-        // Emit tool call event
+        // Emit tool call event for construct
         yield {
           type: "tool-call" as const,
           toolName: "construct_final_response",
           args: { constructionPrompt },
         };
-        // Emit tool result event
+        // Emit tool result event for construct
         yield {
           type: "tool-result" as const,
           toolName: "construct_final_response",
-          result: toolResult,
+          result: constructResult,
+        };
+        // Emit tool call event for predict
+        yield {
+          type: "tool-call" as const,
+          toolName: "predict_recipient_responses",
+          args: {
+            candidates: constructResult.candidates,
+            conversationContext,
+            recipientName: name,
+          },
+        };
+        // Emit tool result event for predict
+        yield {
+          type: "tool-result" as const,
+          toolName: "predict_recipient_responses",
+          result: finalResult,
         };
         // Emit finish event
         yield {
@@ -143,17 +170,17 @@ Generate 4 short, lowercase replies (no emojis, no em-dashes). Vary tone.`;
         };
       })(),
       async getFinalOutput(): Promise<AgentOutput> {
-        return toolResult;
+        return finalResult;
       },
     };
   }
   
   // Normal mode: use orchestrator
   const system = buildInstructions(context);
-  // Allow maxSteps to be configured via environment variable (default: 2 for speed)
+  // Allow maxSteps to be configured via environment variable (default: 3 for construct + predict)
   const maxSteps = process.env.TEXTREME_AGENT_MAX_STEPS
     ? parseInt(process.env.TEXTREME_AGENT_MAX_STEPS, 10)
-    : 2;
+    : 3;
   if (DEBUG) {
     console.log("[orchestrator] runAgentStream start");
     console.log(

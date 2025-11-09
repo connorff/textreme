@@ -70,13 +70,11 @@ export const useMessages = (
     };
   }, [focusedConversation, mode, fetchMessages]);
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to bottom when messages change (always)
   useEffect(() => {
-    if (!isInitialLoad) return;
     if (messages.length === 0) return;
-    // Scroll only on initial open
     requestAnimationFrame(() => {
-      scrollToBottom(true); // instant on open
+      scrollToBottom(isInitialLoad); // instant on initial open, smooth on updates
       setIsInitialLoad(false);
     });
   }, [messages, isInitialLoad, scrollToBottom]);

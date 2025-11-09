@@ -5,7 +5,6 @@ import type {
   AgentOutput,
   AgentStreamEvent,
 } from "../../types/electron";
-import { getDisplayName } from "../../lib/conversationUtils";
 import { MessageBubble } from "../conversation/MessageBubble";
 import { Send, Loader2, Check } from "lucide-react";
 
@@ -24,6 +23,7 @@ interface AgentMessage {
 interface ResponseOption {
   text: string;
   reasoning: string;
+  predictedResponse?: string;
 }
 
 export const AgentView = ({
@@ -41,15 +41,25 @@ export const AgentView = ({
 
   const showOptions = isLoading || responses.length > 0;
   const historyRef = useRef<HTMLDivElement>(null);
+  const chatHistoryRef = useRef<HTMLDivElement>(null);
 
-  // When agent mode mounts, scroll conversation history to bottom once
+  // Auto-scroll conversation history to bottom when messages change
   useEffect(() => {
     requestAnimationFrame(() => {
       if (historyRef.current) {
         historyRef.current.scrollTop = historyRef.current.scrollHeight;
       }
     });
-  }, []);
+  }, [messages]);
+
+  // Auto-scroll agent chat history to bottom when chatHistory changes
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      if (chatHistoryRef.current) {
+        chatHistoryRef.current.scrollTop = chatHistoryRef.current.scrollHeight;
+      }
+    });
+  }, [chatHistory]);
 
   const handleSendPrompt = async () => {
     if (!userPrompt.trim()) return;
@@ -98,17 +108,20 @@ export const AgentView = ({
               (candidate) => ({
                 text: candidate.message,
                 reasoning: candidate.reasoning,
+                predictedResponse: candidate.predictedResponse,
               })
             );
 
-            // Build explanation with bullet points
+            // Build explanation with predicted responses
             const explanation = [
-              "here are four response options:",
+              "they'd respond with:",
               "",
-              ...candidates.map(
-                (candidate, idx) =>
-                  `• option ${idx + 1}: ${candidate.reasoning}`
-              ),
+              ...candidates.map((candidate, idx) => {
+                const prediction = candidate.predictedResponse
+                  ? candidate.predictedResponse
+                  : candidate.reasoning;
+                return `  ${idx + 1}  ${prediction}`;
+              }),
             ].join("\n");
 
             // Add agent response with explanations
@@ -203,7 +216,7 @@ export const AgentView = ({
   return (
     <div className="flex h-full">
       {/* Left side - Chat history and response panels */}
-      <div className="flex flex-col w-[60%] overflow-y-auto">
+      <div className="flex flex-col overflow-y-auto w-[60%]">
         {/* Conversation history */}
         <div
           ref={historyRef}
@@ -230,11 +243,11 @@ export const AgentView = ({
                 {[0, 1, 2, 3].map((idx) => (
                   <div
                     key={idx}
-                    className="relative overflow-hidden rounded-lg bg-gray-200/50"
+                    className="bg-gray-200/50 overflow-hidden relative rounded-lg"
                   >
                     {/* Shimmer animation */}
                     <div
-                      className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/40 to-transparent"
+                      className="-translate-x-full absolute animate-shimmer bg-gradient-to-r from-transparent inset-0 to-transparent via-white/40"
                       style={{
                         animation: "shimmer 2s infinite",
                       }}
@@ -252,8 +265,7 @@ export const AgentView = ({
                     disabled={sendingIndex !== null || sentIndex !== null}
                     className="border-none disabled:cursor-not-allowed flex group items-center justify-center overflow-hidden p-3 relative rounded-lg text-left transition-all"
                     style={{
-                      boxShadow:
-                        "0 2px 8px 0 rgba(0, 0, 0, 0.15)",
+                      boxShadow: "0 2px 8px 0 rgba(0, 0, 0, 0.15)",
                     }}
                   >
                     {/* Suggested response text - no bubble */}
@@ -296,7 +308,10 @@ export const AgentView = ({
       {/* Right side - Chat with agent (30% width, full height) */}
       <div className="flex flex-col w-[40%]">
         {/* Chat history - takes full height */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        <div
+          ref={chatHistoryRef}
+          className="flex-1 overflow-y-auto p-3 space-y-2"
+        >
           {chatHistory.map((msg, idx) => (
             <div
               key={idx}

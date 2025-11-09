@@ -1,4 +1,4 @@
-import { tool, generateObject } from "ai";
+import { tool, generateObject, generateText } from "ai";
 import { z } from "zod";
 import { openai } from "@ai-sdk/openai";
 import { AgentOutput, AgentOutput as AgentOutputSchema } from "./types";
@@ -8,7 +8,11 @@ const MODEL_CONFIG = getAgentModelConfig();
 const CONSTRUCTOR_MODEL = openai(MODEL_CONFIG.model);
 const CONSTRUCTOR_TEMPERATURE = MODEL_CONFIG.temperature;
 
+// Model for predicting responses (using 4o-mini for now)
+const PREDICTION_MODEL = openai("gpt-4o-mini");
+
 let constructToolInvocations = 0;
+let predictToolInvocations = 0;
 let lastToolResult: AgentOutput | null = null;
 
 /**
@@ -83,15 +87,150 @@ export const construct_final_response = tool({
   },
 });
 
+/**
+ * predict_recipient_responses
+ * Takes the 4 candidate messages and predicts how the recipient would respond to each.
+ * Returns a complete AgentOutput with predictions included.
+ */
+export const predict_recipient_responses = tool({
+  description:
+    "Predict how the recipient would respond to each of the 4 candidate messages based on conversation context and their communication style. Returns the complete output with predictions.",
+  parameters: z.object({
+    candidates: z
+      .array(
+        z.object({
+          message: z.string().describe("The candidate message text"),
+          reasoning: z.string().describe("Reasoning for this candidate"),
+          confidence: z.number().describe("Confidence score"),
+        })
+      )
+      .length(4)
+      .describe("The 4 candidate messages to predict responses for"),
+    conversationContext: z
+      .string()
+      .describe(
+        "Brief context about the conversation and recipient's communication style"
+      ),
+    recipientName: z
+      .string()
+      .optional()
+      .describe("Name of the recipient if known"),
+  }),
+  async execute({
+    candidates,
+    conversationContext,
+    recipientName,
+  }: {
+    candidates: Array<{
+      message: string;
+      reasoning: string;
+      confidence: number;
+    }>;
+    conversationContext: string;
+    recipientName?: string;
+  }): Promise<AgentOutput> {
+    const DEBUG = process.env.TEXTREME_AGENT_DEBUG === "1";
+    predictToolInvocations += 1;
+
+    if (DEBUG) {
+      console.log(
+        `[tools] predict_recipient_responses called (count=${predictToolInvocations})`
+      );
+      console.log(
+        `[tools] Predicting responses for ${candidates.length} candidates`
+      );
+    }
+
+    try {
+      const predictions: string[] = [];
+      const name = recipientName || "the recipient";
+
+      // Predict response for each candidate
+      for (let i = 0; i < candidates.length; i++) {
+        const candidate = candidates[i];
+
+        const prompt = [
+          `You are predicting how ${name} would respond to a message.`,
+          "",
+          "Context:",
+          conversationContext,
+          "",
+          `If you send: "${candidate.message}"`,
+          "",
+          `Predict a realistic, natural response from ${name}. Keep it SHORT (1-2 sentences).`,
+          "Match their texting style from the conversation context.",
+          "IMPORTANT: Use all lowercase, no emojis, no em-dashes.",
+        ].join("\n");
+
+        const { text } = await generateText({
+          model: PREDICTION_MODEL,
+          prompt,
+          temperature: 0.7,
+          maxTokens: 100,
+        });
+
+        const finalText = text.trim();
+        predictions.push(finalText);
+
+        if (DEBUG) {
+          console.log(
+            `[tools] Predicted response ${i + 1}: "${finalText.slice(0, 50)}..."`
+          );
+        }
+      }
+
+      // Merge predictions into candidates
+      const candidatesWithPredictions = candidates.map((candidate, i) => ({
+        message: candidate.message,
+        reasoning: candidate.reasoning,
+        confidence: candidate.confidence,
+        predictedResponse: predictions[i],
+      }));
+
+      const output: AgentOutput = {
+        candidates: candidatesWithPredictions,
+      };
+
+      // Store as last result
+      lastToolResult = output;
+
+      if (DEBUG) {
+        console.log(
+          `[tools] predict_recipient_responses completed, stored result with predictions`
+        );
+      }
+
+      return output;
+    } catch (error) {
+      if (DEBUG) {
+        console.error(`[tools] predict_recipient_responses error:`, error);
+      }
+      // Return candidates without predictions on error
+      const output: AgentOutput = {
+        candidates: candidates.map((candidate) => ({
+          message: candidate.message,
+          reasoning: candidate.reasoning,
+          confidence: candidate.confidence,
+          predictedResponse: "[Unable to predict response]",
+        })),
+      };
+      lastToolResult = output;
+      return output;
+    }
+  },
+});
+
 export const tools = {
   construct_final_response,
+  predict_recipient_responses,
 } as const;
 export type Tools = typeof tools;
 
 export function getToolInvocationMetrics() {
   return {
     construct_final_response: constructToolInvocations,
-    total: constructToolInvocations,
+    predict_recipient_responses: predictToolInvocations,
+    total: constructToolInvocations + predictToolInvocations,
   };
 }
 

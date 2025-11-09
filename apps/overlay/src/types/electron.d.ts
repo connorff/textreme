@@ -26,6 +26,7 @@ export interface AgentCandidate {
   message: string;
   reasoning: string;
   confidence: number;
+  predictedResponse?: string;
 }
 
 export interface AgentOutput {
@@ -48,6 +49,12 @@ export type AgentStreamEvent =
       toolName: string;
       result: unknown;
       toolCallId?: string;
+    }
+  | {
+      type: "prediction-delta";
+      candidateIndex: number;
+      textDelta: string;
+      isComplete: boolean;
     }
   | {
       type: "finish";
