@@ -5,5 +5,8 @@ ml/.venv/
 *.log
 .DS_Store
 
+memory/.venv/
+memory/my_memories/
+
 .env
 my_memories
