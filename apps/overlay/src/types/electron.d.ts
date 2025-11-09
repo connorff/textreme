@@ -206,7 +206,7 @@ export interface ElectronAPI {
     messageText: string
   ) => Promise<SendMessageResult>;
   closeWindow: () => void;
-  resizeWindow: (height: number) => void;
+  resizeWindow: (height: number, width?: number) => void;
 }
 
 declare global {

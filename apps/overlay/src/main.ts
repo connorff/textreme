@@ -138,7 +138,7 @@ ipcMain.on("close-window", () => {
 /**
  * Resize window handler — expand upward while keeping bottom fixed
  */
-ipcMain.on("resize-window", (event, newHeight: number) => {
+ipcMain.on("resize-window", (event, newHeight: number, newWidth?: number) => {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win) return;
 
@@ -159,12 +159,19 @@ ipcMain.on("resize-window", (event, newHeight: number) => {
 
   // Always anchor to the original bottom position
   const targetY = align(originalBottomY - newHeight);
+  
+  // Use provided width or keep current width
+  const targetWidth = newWidth ? align(newWidth) : align(cb.width);
+  
+  // Center horizontally if width changes
+  const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
+  const targetX = newWidth ? align((screenWidth - targetWidth) / 2) : align(cb.x);
 
   win.setContentBounds(
     {
-      x: align(cb.x),
+      x: targetX,
       y: targetY,
-      width: align(cb.width),
+      width: targetWidth,
       height: align(newHeight),
     },
     /* animate */ true

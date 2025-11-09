@@ -7,7 +7,7 @@ export const Candidate = z.object({
 });
 
 export const AgentOutput = z.object({
-	candidates: z.array(Candidate).length(3),
+	candidates: z.array(Candidate).length(4),
 });
 
 export type Candidate = z.infer<typeof Candidate>;

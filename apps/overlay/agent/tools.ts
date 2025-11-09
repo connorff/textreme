@@ -14,28 +14,28 @@ let lastToolResult: AgentOutput | null = null;
 /**
  * construct_final_response
  * The orchestrator builds a concise construction prompt containing the
- * relevant context and then calls this tool to produce exactly k=3
+ * relevant context and then calls this tool to produce exactly k=4
  * candidate responses in structured form.
  */
 export const construct_final_response = tool({
   description:
-    "Given a constructionPrompt that contains context and guidance, synthesize exactly three candidate iMessage replies.",
+    "Given a constructionPrompt that contains context and guidance, synthesize exactly four candidate iMessage replies.",
   parameters: z.object({
     constructionPrompt: z
       .string()
       .describe(
-        "A concise prompt containing context and guidance to produce three replies."
+        "A concise prompt containing context and guidance to produce four replies."
       ),
     k: z
-      .literal(3)
-      .default(3)
-      .describe("Number of candidates to produce; fixed at 3."),
+      .literal(4)
+      .default(4)
+      .describe("Number of candidates to produce; fixed at 4."),
   }),
   async execute({
     constructionPrompt,
   }: {
     constructionPrompt: string;
-    k?: 3;
+    k?: 4;
   }): Promise<AgentOutput> {
     const DEBUG = process.env.TEXTREME_AGENT_DEBUG === "1";
     constructToolInvocations += 1;
@@ -55,7 +55,7 @@ export const construct_final_response = tool({
         schema: AgentOutputSchema,
         system: [
           "You generate natural iMessage reply options.",
-          "Create exactly 3 diverse candidates that:",
+          "Create exactly 4 diverse candidates that:",
           "- Directly respond to what was said",
           "- Match the specified tone and style",
           "- Are short and natural (like real texts)",
