@@ -828,24 +828,19 @@ async function loadContactMap(): Promise<Map<string, string>> {
     
     const map = new Map<string, string>();
     
-    // Import sqlite3 dynamically
-    const sqlite3 = require('sqlite3');
+    // Use Node's built-in sqlite module (requires Node 22.5.0+)
+    const { DatabaseSync } = require('node:sqlite');
     
     for (const dbPath of addressbookPaths) {
       try {
         // Query the AddressBook database (same as orchestrate.py get_contact_name)
-        const db = new sqlite3.Database(dbPath, sqlite3.OPEN_READONLY);
+        const db = new DatabaseSync(dbPath, { open: true, readOnly: true });
         
-        const rows = await new Promise<any[]>((resolve, reject) => {
-          db.all(`
-            SELECT c.ZFIRSTNAME, c.ZLASTNAME, p.ZFULLNUMBER
-            FROM ZABCDPHONENUMBER p
-            JOIN ZABCDRECORD c ON p.ZOWNER = c.Z_PK
-          `, (err: any, rows: any[]) => {
-            if (err) reject(err);
-            else resolve(rows || []);
-          });
-        });
+        const rows = db.prepare(`
+          SELECT c.ZFIRSTNAME, c.ZLASTNAME, p.ZFULLNUMBER
+          FROM ZABCDPHONENUMBER p
+          JOIN ZABCDRECORD c ON p.ZOWNER = c.Z_PK
+        `).all();
         
         db.close();
         

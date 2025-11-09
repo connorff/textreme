@@ -6,7 +6,6 @@ export default defineConfig({
     rollupOptions: {
       external: [
         "node:sqlite",
-        "sqlite3",
         "ai",
         "@ai-sdk/openai",
         "@textreme/schema",
