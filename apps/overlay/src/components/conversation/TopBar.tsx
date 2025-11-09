@@ -12,6 +12,7 @@ interface TopBarProps {
   onClearFocus: () => void;
   onClose: () => void;
   getDisplayName: (conversation: UnreadConversation) => string;
+  unreadCount?: number;
 }
 
 export const TopBar = ({
@@ -24,13 +25,14 @@ export const TopBar = ({
   onClearFocus,
   onClose,
   getDisplayName,
+  unreadCount,
 }: TopBarProps) => {
   const currentComposeMode =
     mode === "agent" ? "agent" : mode === "tab" ? "tab" : composeMode;
 
   return (
     <div
-      className="flex items-center justify-between p-3"
+      className="flex items-center justify-between p-3 relative w-full"
       style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
     >
       {/* Top left - inbox and conversation pill */}
@@ -40,7 +42,7 @@ export const TopBar = ({
       >
         <button
           onClick={onInboxClick}
-          className={`p-1.5 rounded-lg hover:bg-accent/50 transition-colors ${
+          className={`p-1 rounded-lg hover:bg-accent/50 transition-colors ${
             mode === "inbox"
               ? "text-foreground bg-accent/50"
               : "text-muted-foreground hover:text-foreground"
@@ -65,6 +67,13 @@ export const TopBar = ({
           </div>
         )}
       </div>
+
+      {/* Center - Unread count (only in blank mode) */}
+      {mode === "blank" && unreadCount !== undefined && (
+        <div className="absolute left-1/2 transform -translate-x-1/2 text-xs text-muted-foreground">
+          {unreadCount} unread {unreadCount === 1 ? 'message' : 'messages'}
+        </div>
+      )}
 
       {/* Top right - tab/agent toggle and close button */}
       <div

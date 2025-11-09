@@ -24,23 +24,23 @@ export const useViewMode = ({ onModeChange }: UseViewModeProps = {}) => {
     if (mode === "blank") {
       setModeWithCallback("inbox");
       requestAnimationFrame(() => {
-        window.electronAPI.resizeWindow(500);
+        window.electronAPI.resizeWindow(400);
       });
     } else if (mode === "tab" || mode === "conversation" || mode === "agent") {
       setModeWithCallback("inbox");
       requestAnimationFrame(() => {
-        window.electronAPI.resizeWindow(500);
+        window.electronAPI.resizeWindow(400);
       });
     } else if (mode === "inbox") {
       if (focusedConversation) {
         setModeWithCallback(composeMode);
         requestAnimationFrame(() => {
-          window.electronAPI.resizeWindow(500);
+          window.electronAPI.resizeWindow(400);
         });
       } else {
         setModeWithCallback("blank");
         requestAnimationFrame(() => {
-          window.electronAPI.resizeWindow(200);
+          window.electronAPI.resizeWindow(50);
         });
       }
     }
@@ -53,8 +53,8 @@ export const useViewMode = ({ onModeChange }: UseViewModeProps = {}) => {
     setComposeMode("tab");
     setModeWithCallback("tab");
     requestAnimationFrame(() => {
-      // Resize back to normal width (600px) when switching to tab mode
-      window.electronAPI.resizeWindow(500, 600);
+      // Resize back to normal width (500px) when switching to tab mode
+      window.electronAPI.resizeWindow(400, 500);
     });
   }, [focusedConversation, setModeWithCallback]);
 
@@ -65,8 +65,8 @@ export const useViewMode = ({ onModeChange }: UseViewModeProps = {}) => {
     setComposeMode("agent");
     setModeWithCallback("agent");
     requestAnimationFrame(() => {
-      // Expand to 900px width and 500px height for agent mode
-      window.electronAPI.resizeWindow(500, 900);
+      // Expand to 800px width and 400px height for agent mode
+      window.electronAPI.resizeWindow(400, 800);
     });
   }, [focusedConversation, setModeWithCallback]);
 
@@ -77,7 +77,7 @@ export const useViewMode = ({ onModeChange }: UseViewModeProps = {}) => {
       setComposeMode("tab");
       setModeWithCallback("tab");
       requestAnimationFrame(() => {
-        window.electronAPI.resizeWindow(500, 600);
+        window.electronAPI.resizeWindow(400, 500);
       });
     },
     [setModeWithCallback]
@@ -88,7 +88,7 @@ export const useViewMode = ({ onModeChange }: UseViewModeProps = {}) => {
     if (mode === "tab" || mode === "conversation" || mode === "agent") {
       setModeWithCallback("blank");
       requestAnimationFrame(() => {
-        window.electronAPI.resizeWindow(200, 600);
+        window.electronAPI.resizeWindow(50, 500);
       });
     }
   }, [mode, setModeWithCallback]);
