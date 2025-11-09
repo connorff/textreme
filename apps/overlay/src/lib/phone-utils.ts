@@ -21,3 +21,33 @@ export function isPhoneIdentifier(identifier: string | null): boolean {
   const digitCount = identifier.replace(/\D/g, "").length;
   return digitCount >= 7 && digitCount <= 15;
 }
+
+/**
+ * Format a phone number for display
+ * Handles US phone numbers and international formats
+ */
+export function formatPhoneNumber(phoneNumber: string): string {
+  // Remove all non-digit characters except +
+  const cleaned = phoneNumber.replace(/[^\d+]/g, '');
+  
+  // If it starts with +1 and has 12 characters (+1 + 10 digits), format as US number
+  if (cleaned.startsWith('+1') && cleaned.length === 12) {
+    // +1 (XXX) XXX-XXXX
+    return `+1 (${cleaned.slice(2, 5)}) ${cleaned.slice(5, 8)}-${cleaned.slice(8)}`;
+  }
+  
+  // If it's 10 digits, format as US number
+  if (cleaned.length === 10) {
+    // (XXX) XXX-XXXX
+    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+  }
+  
+  // If it's 11 digits starting with 1, format as US number
+  if (cleaned.length === 11 && cleaned.startsWith('1')) {
+    // +1 (XXX) XXX-XXXX
+    return `+1 (${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
+  }
+  
+  // Otherwise return as-is
+  return phoneNumber;
+}

@@ -80,9 +80,10 @@ const createWindow = (): void => {
   });
 
   // Open the DevTools.
-  if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools();
-  }
+  // Commented out - can be opened manually with View -> Toggle Developer Tools
+  // if (!app.isPackaged) {
+  //   mainWindow.webContents.openDevTools();
+  // }
 };
 
 // This method will be called when Electron has finished
@@ -590,10 +591,12 @@ async function loadContactMap(): Promise<Map<string, string>> {
   try {
     console.log("Loading contacts from Contacts app...");
 
-    // Path to the contacts_dump binary (should be copied by build script)
+    // Path to the contacts_dump binary (should be in the same directory)
     const binaryPath = app.isPackaged
       ? path.join(process.resourcesPath, "contacts_dump")
       : path.join(__dirname, "../../contacts_dump");
+
+    console.log(`[Contacts] Using binary at: ${binaryPath}`);
 
     // Execute the Swift binary
     const proc = spawn(binaryPath, [], {
@@ -647,21 +650,58 @@ async function loadContactMap(): Promise<Map<string, string>> {
 
         const normalized = normalizePhoneNumber(phoneRaw);
 
-        // Store multiple formats for phone numbers
-        map.set(normalized, name);
+        // Store many different format variations to maximize matching
+        const variants = new Set<string>();
+        
+        // Add the normalized version
+        variants.add(normalized);
+        
+        // Add without leading +
         if (normalized.startsWith("+")) {
-          map.set(normalized.slice(1), name);
+          variants.add(normalized.slice(1));
         }
+        
+        // Add without +1 prefix
+        if (normalized.startsWith("+1")) {
+          variants.add(normalized.slice(2));
+        }
+        
+        // Add without 1 prefix  
+        if (normalized.startsWith("1") && normalized.length === 11) {
+          variants.add(normalized.slice(1));
+        }
+        
+        // Add last 10 digits (US phone number)
         if (normalized.length >= 10) {
-          map.set(normalized.slice(-10), name);
+          variants.add(normalized.slice(-10));
         }
+        
+        // Add last 7 digits (local number)
         if (normalized.length >= 7) {
-          map.set(normalized.slice(-7), name);
+          variants.add(normalized.slice(-7));
+        }
+        
+        // Add with +1 prefix if not present and looks like US number
+        if (!normalized.startsWith("+") && normalized.length === 10) {
+          variants.add("+1" + normalized);
+          variants.add("1" + normalized);
+        }
+        
+        // Store all variants
+        for (const variant of variants) {
+          if (variant.length >= 7) { // Only store variants with reasonable length
+            map.set(variant, name);
+          }
         }
       }
     }
 
     console.log(`Built contact map with ${map.size} phone number mappings`);
+    
+    // Debug: Show a sample of what's in the map
+    const sampleEntries = Array.from(map.entries()).slice(0, 10);
+    console.log(`[Contact Map] Sample entries:`, sampleEntries);
+    
     contactMap = map;
     return map;
   } catch (error: any) {
@@ -737,20 +777,46 @@ function lookupContactName(identifier: string): string | null {
     return null;
   }
 
-  // Try various normalized formats
-  const formats = [identifier, normalizePhoneNumber(identifier)];
-
+  // Try various normalized formats (matching what we store in the map)
   const normalized = normalizePhoneNumber(identifier);
+  const formats = new Set<string>();
+  
+  // Add original and normalized
+  formats.add(identifier);
+  formats.add(normalized);
+  
+  // Add without leading +
   if (normalized.startsWith("+")) {
-    formats.push(normalized.slice(1));
+    formats.add(normalized.slice(1));
   }
+  
+  // Add without +1 prefix
+  if (normalized.startsWith("+1")) {
+    formats.add(normalized.slice(2));
+  }
+  
+  // Add without 1 prefix
+  if (normalized.startsWith("1") && normalized.length === 11) {
+    formats.add(normalized.slice(1));
+  }
+  
+  // Add last 10 digits (US phone number)
   if (normalized.length >= 10) {
-    formats.push(normalized.slice(-10));
+    formats.add(normalized.slice(-10));
   }
+  
+  // Add last 7 digits (local number)
   if (normalized.length >= 7) {
-    formats.push(normalized.slice(-7));
+    formats.add(normalized.slice(-7));
+  }
+  
+  // Add with +1 prefix if not present and looks like US number
+  if (!normalized.startsWith("+") && normalized.length === 10) {
+    formats.add("+1" + normalized);
+    formats.add("1" + normalized);
   }
 
+  // Try each format
   for (const format of formats) {
     const name = contactMap.get(format);
     if (name) {
