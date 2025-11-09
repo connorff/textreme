@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type {
   UnreadConversation,
   ConversationMessage,
@@ -38,6 +38,18 @@ export const AgentView = ({
   const [userPrompt, setUserPrompt] = useState("");
   const [sendingIndex, setSendingIndex] = useState<number | null>(null);
   const [sentIndex, setSentIndex] = useState<number | null>(null);
+
+  const showOptions = isLoading || responses.length > 0;
+  const historyRef = useRef<HTMLDivElement>(null);
+
+  // When agent mode mounts, scroll conversation history to bottom once
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      if (historyRef.current) {
+        historyRef.current.scrollTop = historyRef.current.scrollHeight;
+      }
+    });
+  }, []);
 
   const handleSendPrompt = async () => {
     if (!userPrompt.trim()) return;
@@ -190,10 +202,13 @@ export const AgentView = ({
 
   return (
     <div className="flex h-full">
-      {/* Left side - Chat history and 4 response panels (70% width) */}
+      {/* Left side - Chat history and response panels */}
       <div className="flex flex-col w-[60%] overflow-y-auto">
-        {/* Conversation history at the top - 70% height */}
-        <div className="h-[60%] overflow-y-auto p-3">
+        {/* Conversation history */}
+        <div
+          ref={historyRef}
+          className={`${showOptions ? "h-[60%]" : "flex-1"} overflow-y-auto p-3`}
+        >
           <div className="space-y-1">
             {messages.slice(-20).map((msg, msgIdx) => (
               <div
@@ -206,74 +221,76 @@ export const AgentView = ({
           </div>
         </div>
 
-        {/* 4 response panels below - 30% height */}
-        <div className="h-[40%] p-3">
-          {isLoading && responses.length === 0 ? (
-            // Show 4 placeholder boxes with shimmer animation
-            <div className="gap-2 grid grid-cols-2 grid-rows-2 h-full">
-              {[0, 1, 2, 3].map((idx) => (
-                <div
-                  key={idx}
-                  className="relative overflow-hidden rounded-lg bg-gray-200/50"
-                >
-                  {/* Shimmer animation */}
+        {/* Response panels (only when loading or options available) */}
+        {showOptions && (
+          <div className="h-[40%] p-3">
+            {isLoading && responses.length === 0 ? (
+              // Show 4 placeholder boxes with shimmer animation
+              <div className="gap-2 grid grid-cols-2 grid-rows-2 h-full">
+                {[0, 1, 2, 3].map((idx) => (
                   <div
-                    className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/40 to-transparent"
-                    style={{
-                      animation: "shimmer 2s infinite",
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          ) : (
-            // Show 4 response panels in 2 rows, 2 columns
-            <div className="gap-2 grid grid-cols-2 grid-rows-2 h-full">
-              {responses.map((response, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleResponseClick(response.text, idx)}
-                  disabled={sendingIndex !== null || sentIndex !== null}
-                  className="border-none disabled:cursor-not-allowed flex group items-center justify-center overflow-hidden p-3 relative rounded-lg text-left transition-all"
-                  style={{
-                    boxShadow:
-                      "0 2px 8px 0 rgba(0, 0, 0, 0.15)",
-                  }}
-                >
-                  {/* Suggested response text - no bubble */}
-                  <div className="break-words text-foreground text-xs">
-                    {response.text}
+                    key={idx}
+                    className="relative overflow-hidden rounded-lg bg-gray-200/50"
+                  >
+                    {/* Shimmer animation */}
+                    <div
+                      className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/40 to-transparent"
+                      style={{
+                        animation: "shimmer 2s infinite",
+                      }}
+                    />
                   </div>
-
-                  {/* Hover overlay with blur and "send" text - only show if not sending/sent */}
-                  {sendingIndex === null && sentIndex === null && (
-                    <div className="absolute backdrop-blur-sm bg-blue-500/40 flex gap-2 group-hover:opacity-100 inset-0 items-center justify-center opacity-0 rounded-lg transition-opacity">
-                      <span className="text-sm text-white">send</span>
-                      <Send className="h-4 text-white w-4" />
+                ))}
+              </div>
+            ) : (
+              // Show 4 response panels in 2 rows, 2 columns
+              <div className="gap-2 grid grid-cols-2 grid-rows-2 h-full">
+                {responses.map((response, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleResponseClick(response.text, idx)}
+                    disabled={sendingIndex !== null || sentIndex !== null}
+                    className="border-none disabled:cursor-not-allowed flex group items-center justify-center overflow-hidden p-3 relative rounded-lg text-left transition-all"
+                    style={{
+                      boxShadow:
+                        "0 2px 8px 0 rgba(0, 0, 0, 0.15)",
+                    }}
+                  >
+                    {/* Suggested response text - no bubble */}
+                    <div className="break-words text-foreground text-xs">
+                      {response.text}
                     </div>
-                  )}
 
-                  {/* Spinner overlay - show when this button is sending */}
-                  {sendingIndex === idx && (
-                    <div className="absolute backdrop-blur-sm bg-blue-500/60 flex inset-0 items-center justify-center rounded-lg">
-                      <Loader2 className="animate-spin h-6 text-white w-6" />
-                    </div>
-                  )}
+                    {/* Hover overlay with blur and "send" text - only show if not sending/sent */}
+                    {sendingIndex === null && sentIndex === null && (
+                      <div className="absolute backdrop-blur-sm bg-blue-500/40 flex gap-2 group-hover:opacity-100 inset-0 items-center justify-center opacity-0 rounded-lg transition-opacity">
+                        <span className="text-sm text-white">send</span>
+                        <Send className="h-4 text-white w-4" />
+                      </div>
+                    )}
 
-                  {/* Checkmark overlay - show when this button's message was sent */}
-                  {sentIndex === idx && (
-                    <div className="absolute animate-in backdrop-blur-sm bg-blue-500/80 duration-300 fade-in flex inset-0 items-center justify-center rounded-lg zoom-in">
-                      <Check
-                        className="animate-in duration-300 h-4 text-white w-4 zoom-in"
-                        strokeWidth={3}
-                      />
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+                    {/* Spinner overlay - show when this button is sending */}
+                    {sendingIndex === idx && (
+                      <div className="absolute backdrop-blur-sm bg-blue-500/60 flex inset-0 items-center justify-center rounded-lg">
+                        <Loader2 className="animate-spin h-6 text-white w-6" />
+                      </div>
+                    )}
+
+                    {/* Checkmark overlay - show when this button's message was sent */}
+                    {sentIndex === idx && (
+                      <div className="absolute animate-in backdrop-blur-sm bg-blue-500/80 duration-300 fade-in flex inset-0 items-center justify-center rounded-lg zoom-in">
+                        <Check
+                          className="animate-in duration-300 h-4 text-white w-4 zoom-in"
+                          strokeWidth={3}
+                        />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Right side - Chat with agent (30% width, full height) */}

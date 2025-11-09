@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getUnreadConversations: () => ipcRenderer.invoke("get-unread-conversations"),
   getConversationMessages: (chatId: string, limit?: number) =>
     ipcRenderer.invoke("get-conversation-messages", chatId, limit),
+  resolveFileUrl: (filePath: string) =>
+    ipcRenderer.invoke("resolve-file-url", filePath),
+  readFileAsDataUrl: (filePath: string, mimeType?: string) =>
+    ipcRenderer.invoke("read-file-as-data-url", filePath, mimeType),
 
   // System
   openSystemPreferences: () => ipcRenderer.invoke("open-system-preferences"),

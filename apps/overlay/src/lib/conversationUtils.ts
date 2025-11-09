@@ -33,9 +33,10 @@ export const getDisplayName = (conversation: UnreadConversation): string => {
 };
 
 export const getLatestMessage = (conversation: UnreadConversation): string => {
-  const lastMessage =
-    conversation.unreadMessages[conversation.unreadMessages.length - 1];
-  const text = lastMessage?.text || "[No text]";
+  // Prefer lastMessageText from the conversation, fall back to last unread message
+  const text = conversation.lastMessageText || 
+               conversation.unreadMessages[conversation.unreadMessages.length - 1]?.text || 
+               "[No text]";
   return text.length > 50 ? text.substring(0, 50) + "..." : text;
 };
 

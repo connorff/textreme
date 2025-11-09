@@ -13,3 +13,9 @@ my_memories
 apps/overlay/contacts_dump
 
 contacts_dump
+
+# Rust build artifacts
+ml/**/target/
+
+# Vite/Electron forge temp build outputs
+apps/overlay/.vite/
