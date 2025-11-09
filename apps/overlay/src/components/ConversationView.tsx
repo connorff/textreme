@@ -10,6 +10,7 @@ import { ChatInput } from "./conversation/ChatInput";
 import { TopBar } from "./conversation/TopBar";
 import { getDisplayName } from "../lib/conversationUtils";
 import HelloSvg from "../assets/AppleHello.svg";
+import { sendMessage } from "../lib/sendMessage";
 
 export const ConversationView = () => {
   const [draft, setDraft] = useState("");
@@ -18,7 +19,7 @@ export const ConversationView = () => {
 
   // Custom hooks
   const { conversations, selectedIndex, setSelectedIndex } = useConversations();
-  
+
   const {
     mode,
     focusedConversation,
@@ -95,6 +96,23 @@ export const ConversationView = () => {
     handleClearFocus();
   };
 
+  const handleSendMessage = async () => {
+    if (!focusedConversation || !draft.trim()) {
+      return;
+    }
+
+    const result = await sendMessage(focusedConversation, draft);
+
+    if (result.success) {
+      // Clear the draft on success
+      setDraft("");
+      console.log("Message sent successfully!");
+    } else {
+      console.error("Failed to send message:", result.error);
+      // TODO: Show error to user
+    }
+  };
+
   // Keyboard navigation
   useKeyboardNavigation({
     mode,
@@ -106,6 +124,7 @@ export const ConversationView = () => {
     selectedSuggestionIndex,
     setSelectedSuggestionIndex,
     isTyping,
+    draft,
     handleInboxClick,
     handleSelectConversation: (conversation) => {
       const index = conversations.findIndex((c) => c.id === conversation.id);
@@ -115,10 +134,11 @@ export const ConversationView = () => {
     },
     handleClearFocus: handleClearFocusWithCleanup,
     handleSuggestionClick,
+    handleSendMessage,
   });
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-background rounded-xl overflow-hidden">
+    <div className="bg-background flex flex-col h-screen overflow-hidden rounded-xl w-screen">
       {/* Inbox area */}
       {mode === "inbox" && (
         <ConversationList
@@ -138,7 +158,7 @@ export const ConversationView = () => {
       )}
 
       {/* Chatbox area - always visible at bottom, fixed height */}
-      <div className="h-[200px] flex flex-col">
+      <div className="flex flex-col h-[200px]">
         <TopBar
           mode={mode}
           focusedConversation={focusedConversation}
@@ -151,8 +171,8 @@ export const ConversationView = () => {
 
         {/* Chatbox content - show Hello.svg when not in tab or agent mode */}
         {mode !== "tab" && mode !== "conversation" && (
-          <div className="flex items-center justify-center h-full pb-10">
-            <img src={HelloSvg} alt="Hello" className="w-44 opacity-50" />
+          <div className="flex h-full items-center justify-center pb-10">
+            <img src={HelloSvg} alt="Hello" className="opacity-50 w-44" />
           </div>
         )}
 
@@ -197,4 +217,3 @@ export const ConversationView = () => {
     </div>
   );
 };
-

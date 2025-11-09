@@ -12,10 +12,12 @@ interface UseKeyboardNavigationProps {
   selectedSuggestionIndex: number;
   setSelectedSuggestionIndex: (index: number | ((prev: number) => number)) => void;
   isTyping: boolean;
+  draft: string;
   handleInboxClick: () => void;
   handleSelectConversation: (conversation: UnreadConversation) => void;
   handleClearFocus: () => void;
   handleSuggestionClick: (suggestion: string) => void;
+  handleSendMessage: () => void;
 }
 
 export const useKeyboardNavigation = ({
@@ -28,10 +30,12 @@ export const useKeyboardNavigation = ({
   selectedSuggestionIndex,
   setSelectedSuggestionIndex,
   isTyping,
+  draft,
   handleInboxClick,
   handleSelectConversation,
   handleClearFocus,
   handleSuggestionClick,
+  handleSendMessage,
 }: UseKeyboardNavigationProps) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -87,6 +91,10 @@ export const useKeyboardNavigation = ({
               handleSuggestionClick(selectedSuggestion);
             }
           }
+        } else if (e.key === "Enter" && draft.trim()) {
+          // Send message when Enter is pressed without suggestions
+          e.preventDefault();
+          handleSendMessage();
         }
       }
     };
@@ -101,10 +109,12 @@ export const useKeyboardNavigation = ({
     suggestions,
     selectedSuggestionIndex,
     isTyping,
+    draft,
     handleInboxClick,
     handleSelectConversation,
     handleClearFocus,
     handleSuggestionClick,
+    handleSendMessage,
     setSelectedIndex,
     setSelectedSuggestionIndex,
   ]);
