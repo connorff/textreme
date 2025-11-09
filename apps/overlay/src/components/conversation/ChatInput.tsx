@@ -11,6 +11,12 @@ interface ChatInputProps {
   isTyping: boolean;
 }
 
+// Helper to format the full preview text
+const formatSuggestionPreview = (draft: string, completion: string): string => {
+  const needsSpace = draft && !draft.endsWith(" ");
+  return draft + (needsSpace ? " " : "") + completion;
+};
+
 export const ChatInput = ({
   draft,
   setDraft,
@@ -71,32 +77,34 @@ export const ChatInput = ({
       {/* Autocomplete suggestions - below user text in grey */}
       {showSuggestions && (
         <div className="space-y-0.5">
-          {suggestions.map((suggestion, idx) => (
-            <div
-              key={idx}
-              ref={(el) => {
-                if (suggestionRefs.current) {
-                  suggestionRefs.current[idx] = el;
-                }
-              }}
-              onClick={() => onSuggestionClick(suggestion)}
-              className={`w-full py-1 px-1 text-sm cursor-pointer transition-colors rounded-md ${
-                idx === selectedSuggestionIndex
-                  ? "text-gray-500 bg-gray-100"
-                  : "text-gray-300 hover:bg-gray-100"
-              }`}
-              style={{
-                fontFamily: "Inter, sans-serif",
-                fontSize: "14px",
-                lineHeight: "20px",
-              }}
-            >
-              {suggestion}
-            </div>
-          ))}
+          {suggestions.map((suggestion, idx) => {
+            const fullPreview = formatSuggestionPreview(draft, suggestion);
+            return (
+              <div
+                key={idx}
+                ref={(el) => {
+                  if (suggestionRefs.current) {
+                    suggestionRefs.current[idx] = el;
+                  }
+                }}
+                onClick={() => onSuggestionClick(suggestion)}
+                className={`w-full py-1 px-1 text-sm cursor-pointer transition-colors rounded-md ${
+                  idx === selectedSuggestionIndex
+                    ? "text-gray-500 bg-gray-100"
+                    : "text-gray-300 hover:bg-gray-100"
+                }`}
+                style={{
+                  fontFamily: "Inter, sans-serif",
+                  fontSize: "14px",
+                  lineHeight: "20px",
+                }}
+              >
+                {fullPreview}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 };
-

@@ -1592,7 +1592,104 @@ ipcMain.handle(
 );
 
 /**
- * Generate text suggestions using OpenAI
+ * Generate text completions using OpenAI with structured output
+ */
+async function generateCompletionsWithAI(
+  lastMessages: Array<{ text: string | null; isFromMe: boolean }>,
+  draft: string
+): Promise<string[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY environment variable is not set");
+  }
+
+  // Build conversation context
+  const contextLines = lastMessages
+    .slice(-10) // Last 10 messages for context
+    .map((msg, idx) => {
+      const sender = msg.isFromMe ? "You" : "Them";
+      const text = msg.text || "[No text]";
+      return `${sender}: ${text}`;
+    });
+
+  const context = contextLines.join("\n");
+
+  const systemPrompt = `You are an autocomplete system for iMessage. Given a conversation context and partial text the user is typing, predict 3 different ways the user might complete their message.
+
+Rules:
+- Generate ONLY the continuation text that comes AFTER the user's partial input
+- Do NOT repeat the user's input text - only provide what comes next
+- Ensure proper grammar: add punctuation (?, !, .) if the draft needs it before continuing
+- Use proper capitalization: lowercase if continuing same sentence, uppercase if starting new sentence
+- Match the user's style and tone from the conversation
+- Keep completions short and natural (typically a few words to one sentence)
+- NO EMOJIS - plain text only
+- The continuation should flow naturally from where the user stopped typing
+- Provide diverse options (different tones, lengths, or approaches)
+
+Examples:
+If user typed: "I don't care about"
+Good completions: ["your opinion", "what they think", "that right now"]
+
+If user typed: "who asked"
+Good completions: ["?", " lol", "? That's totally unnecessary"]
+
+If user typed: "that's"
+Good completions: [" so expensive", " ridiculous", " way too much"]
+
+Bad completions: ["I don't care about your opinion", "Who asked lol", "That's expensive"]`;
+
+  const userPrompt = `Conversation context:
+${context}
+
+User is typing: "${draft}"
+
+Generate 3 different ways to complete this message. Return ONLY the text that continues after "${draft}". Return as a JSON object with a "completions" array of strings.`;
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 1.0,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        `OpenAI API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`
+      );
+    }
+
+    const data = await response.json();
+    const content = data.choices[0]?.message?.content;
+
+    if (!content) {
+      throw new Error("No content in OpenAI response");
+    }
+
+    const parsed = JSON.parse(content);
+    const completions = parsed.completions || [];
+    
+    return completions.slice(0, 3);
+  } catch (error) {
+    console.error("OpenAI API error:", error);
+    throw error;
+  }
+}
+
+/**
+ * Generate text suggestions using OpenAI (legacy)
  */
 async function generateSuggestionsWithOpenAI(
   lastMessages: Array<{ text: string | null; isFromMe: boolean }>,
@@ -1762,6 +1859,32 @@ ipcMain.handle(
       if (db) {
         db.close();
       }
+    }
+  }
+);
+
+// IPC handler for generating autocomplete suggestions with messages from UI
+ipcMain.handle(
+  "generate-completions",
+  async (
+    _event,
+    messages: Array<{ text: string | null; isFromMe: boolean }>,
+    draft: string
+  ) => {
+    try {
+      const completions = await generateCompletionsWithAI(messages, draft);
+
+      return {
+        success: true,
+        suggestions: completions,
+      };
+    } catch (error: any) {
+      console.error("Error generating completions:", error);
+      return {
+        success: false,
+        suggestions: [],
+        error: error.message || "Failed to generate completions",
+      };
     }
   }
 );

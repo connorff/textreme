@@ -47,7 +47,7 @@ export const ConversationView = () => {
     setSelectedSuggestionIndex,
     isTyping,
     suggestionRefs,
-  } = useSuggestions(draft, focusedConversation);
+  } = useSuggestions(draft, focusedConversation, messages);
 
   // Focus input when conversation view opens
   useEffect(() => {
@@ -87,8 +87,10 @@ export const ConversationView = () => {
   };
 
   const handleSuggestionClick = (suggestion: string) => {
-    // Append suggestion to current draft with a space
-    setDraft(draft + " " + suggestion);
+    // Append the completion to the draft
+    // Add a space before if draft doesn't end with one
+    const needsSpace = draft && !draft.endsWith(" ");
+    setDraft(draft + (needsSpace ? " " : "") + suggestion);
     inputRef.current?.focus();
   };
 

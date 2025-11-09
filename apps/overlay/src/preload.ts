@@ -27,6 +27,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     mode: "tab" | "agent",
     draft?: string
   ) => ipcRenderer.invoke("generate-suggestions", chatGuid, mode, draft),
+  generateCompletions: (
+    messages: Array<{ text: string | null; isFromMe: boolean }>,
+    draft: string
+  ) => ipcRenderer.invoke("generate-completions", messages, draft),
   runAgent: (
     query: string,
     chatGuid: string,

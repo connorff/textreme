@@ -193,6 +193,10 @@ export interface ElectronAPI {
     mode: "tab" | "agent",
     draft?: string
   ) => Promise<SuggestionResponse>;
+  generateCompletions: (
+    messages: Array<{ text: string | null; isFromMe: boolean }>,
+    draft: string
+  ) => Promise<SuggestionResponse>;
   runAgent: (
     query: string,
     chatGuid: string,
