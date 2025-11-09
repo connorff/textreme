@@ -214,6 +214,7 @@ class ChatDatabase:
         cursor = conn.cursor()
         
         # Use chat_message_join to properly link messages to chats and handles
+        # Filter for 1:1 chats only (style = 45) to exclude group chats
         query = """
         SELECT 
             h.id as handle_id,
@@ -226,6 +227,7 @@ class ChatDatabase:
         INNER JOIN handle h ON chj.handle_id = h.ROWID
         WHERE m.date > ?
             AND m.item_type = 0
+            AND c.style = 45
         GROUP BY h.id
         ORDER BY message_count DESC
         LIMIT ?
@@ -991,13 +993,15 @@ Timespan: {messages[0].timestamp.date()} to {messages[-1].timestamp.date()}
 Sample conversation:
 {conversation_text}
 
-Format your response as JSON:
+Return ONLY a valid JSON object in this exact format (no markdown, no code blocks):
 {{
   "relationship_type": "...",
   "description": "...",
   "important_moments": ["...", "..."],
   "milestones": ["...", "..."]
-}}"""
+}}
+
+Return ONLY the JSON object, no other text."""
         
         def make_api_call(client):
             return client.chat.completions.create(
@@ -1012,11 +1016,20 @@ Format your response as JSON:
         
         try:
             response = self.key_manager.call_with_retry(make_api_call)
-            result_text = response.choices[0].message.content
+            result_text = response.choices[0].message.content.strip()
+            
             # Try to parse JSON from response
             try:
+                # Remove markdown code blocks if present
+                if result_text.startswith("```"):
+                    result_text = result_text.split("```")[1]
+                    if result_text.startswith("json"):
+                        result_text = result_text[4:]
+                    result_text = result_text.strip()
+                
                 result = json.loads(result_text)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                print(f"  Warning: Could not parse relationship JSON: {e}")
                 # If not valid JSON, create structured response
                 result = {
                     "relationship_type": "unknown",
