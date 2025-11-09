@@ -1,0 +1,85 @@
+import { tool, generateObject } from "ai";
+import { z } from "zod";
+import { openai } from "@ai-sdk/openai";
+import { AgentOutput, AgentOutput as AgentOutputSchema } from "./types";
+
+let constructToolInvocations = 0;
+let lastToolResult: AgentOutput | null = null;
+
+/**
+ * construct_final_response
+ * The orchestrator builds a concise construction prompt containing the
+ * relevant context and then calls this tool to produce exactly k=3
+ * candidate responses in structured form.
+ */
+export const construct_final_response = tool({
+  description:
+    "Given a constructionPrompt that contains context and guidance, synthesize exactly three candidate iMessage replies.",
+  parameters: z.object({
+    constructionPrompt: z
+      .string()
+      .describe(
+        "A concise prompt containing context and guidance to produce three replies."
+      ),
+    k: z
+      .literal(3)
+      .default(3)
+      .describe("Number of candidates to produce; fixed at 3."),
+  }),
+  async execute({
+    constructionPrompt,
+  }: {
+    constructionPrompt: string;
+    k?: 3;
+  }): Promise<AgentOutput> {
+    const DEBUG = process.env.TEXTREME_AGENT_DEBUG === "1";
+    constructToolInvocations += 1;
+    if (DEBUG) {
+      const preview = constructionPrompt.slice(0, 200).replace(/\n/g, " ");
+      console.log(
+        `[tools] construct_final_response called (count=${constructToolInvocations})`
+      );
+      console.log(`[tools] prompt preview: "${preview}"...`);
+    }
+    try {
+      const { object } = await generateObject({
+        model: openai("gpt-5-mini"),
+        schema: AgentOutputSchema,
+        prompt: constructionPrompt,
+        temperature: 1,
+      });
+      if (DEBUG) {
+        console.log(
+          `[tools] construct_final_response produced ${object.candidates.length} candidates`
+        );
+        console.log(
+          `[tools] Storing result, first candidate:`,
+          object.candidates[0]?.message?.slice(0, 50)
+        );
+      }
+      lastToolResult = object;
+      return object;
+    } catch (error) {
+      if (DEBUG) {
+        console.error(`[tools] construct_final_response error:`, error);
+      }
+      throw error;
+    }
+  },
+});
+
+export const tools = {
+  construct_final_response,
+} as const;
+export type Tools = typeof tools;
+
+export function getToolInvocationMetrics() {
+  return {
+    construct_final_response: constructToolInvocations,
+    total: constructToolInvocations,
+  };
+}
+
+export function getLastToolResult(): AgentOutput | null {
+  return lastToolResult;
+}

@@ -12,7 +12,8 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
+    "lint": "eslint --ext .ts,.tsx .",
+    "agent:demo": "tsx agent/demo.ts"
   },
   "keywords": [],
   "author": {
@@ -49,14 +50,19 @@
     "postcss": "^8.5.6",
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^3.4.18",
+    "tsx": "^4.19.2",
     "typescript": "~4.5.4",
     "vite": "^5.4.21"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^0.0.61",
     "@textreme/client": "workspace:*",
     "@textreme/schema": "workspace:*",
+    "ai": "^3.4.33",
+    "dotenv": "^16.4.5",
     "electron-squirrel-startup": "^1.0.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "zod": "^3.23.8"
   }
 }
