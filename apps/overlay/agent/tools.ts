@@ -85,7 +85,19 @@ export const construct_final_response = tool({
         
         // Parse response: should be in format "[text] {content}"
         const match = text.match(/\[text\]\s*(.*?)(?:%|$)/);
-        const message = match && match[1] ? match[1].trim() : text.trim();
+        let message = match && match[1] ? match[1].trim() : text.trim();
+        
+        // Remove role indicators like "ME:", "YOU:", etc. at the start of the message
+        message = message.replace(/^(ME|YOU|THEM|USER|RECIPIENT):\s*/i, '');
+        
+        // If there's a role indicator in the middle (like "ME:" on a new line), take only the first line
+        const roleInMiddle = message.match(/^(.*?)(?:\n|^)(ME|YOU|THEM|USER|RECIPIENT):/i);
+        if (roleInMiddle) {
+          message = roleInMiddle[1].trim();
+        }
+        
+        // Also split by newlines and take only the first line to ensure single-line output
+        message = message.split('\n')[0].trim();
         
         return {
           message: message,

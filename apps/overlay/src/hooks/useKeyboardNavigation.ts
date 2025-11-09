@@ -92,6 +92,10 @@ export const useKeyboardNavigation = ({
         if (e.key === "Escape") {
           e.preventDefault();
           handleClearFocus();
+        } else if (e.key === "Tab" && draft.trim()) {
+          // Tab key sends the message
+          e.preventDefault();
+          handleSendMessage();
         } else if (suggestions.length > 0 && !isTyping) {
           if (e.key === "ArrowDown") {
             e.preventDefault();
