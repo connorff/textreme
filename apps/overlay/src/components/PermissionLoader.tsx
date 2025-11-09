@@ -50,10 +50,8 @@ export const PermissionLoader = ({
 
         setState("granted");
 
-        // Transition to main app immediately
-        setTimeout(() => {
-          onAccessGranted();
-        }, 100);
+        // Transition to main app immediately without showing loading screen
+        onAccessGranted();
       } else {
         setState("denied");
         setErrorMessage(result.error || "Unknown error accessing database");
