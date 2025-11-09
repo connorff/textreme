@@ -159,13 +159,15 @@ ipcMain.on("resize-window", (event, newHeight: number, newWidth?: number) => {
 
   // Always anchor to the original bottom position
   const targetY = align(originalBottomY - newHeight);
-  
+
   // Use provided width or keep current width
   const targetWidth = newWidth ? align(newWidth) : align(cb.width);
-  
+
   // Center horizontally if width changes
   const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
-  const targetX = newWidth ? align((screenWidth - targetWidth) / 2) : align(cb.x);
+  const targetX = newWidth
+    ? align((screenWidth - targetWidth) / 2)
+    : align(cb.x);
 
   win.setContentBounds(
     {
@@ -1691,7 +1693,10 @@ function escapeAppleScriptString(str: string): string {
 }
 
 // Helper function to execute AppleScript using shell command with timeout
-async function executeAppleScript(script: string, timeoutMs: number = 10000): Promise<void> {
+async function executeAppleScript(
+  script: string,
+  timeoutMs: number = 10000
+): Promise<void> {
   // Escape the script for shell: replace single quotes with '\'' and wrap in single quotes
   // This ensures the script is safely passed to the shell
   const escapedScript = script.replace(/'/g, "'\\''");
@@ -1699,17 +1704,26 @@ async function executeAppleScript(script: string, timeoutMs: number = 10000): Pr
   const command = `printf '%s\n' '${escapedScript}' | osascript`;
 
   console.log("[DEBUG] executeAppleScript - Command length:", command.length);
-  console.log("[DEBUG] executeAppleScript - Script preview (first 200 chars):", script.substring(0, 200));
+  console.log(
+    "[DEBUG] executeAppleScript - Script preview (first 200 chars):",
+    script.substring(0, 200)
+  );
 
   // Create a promise that times out
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error(`AppleScript execution timed out after ${timeoutMs}ms`)), timeoutMs);
+    setTimeout(
+      () =>
+        reject(
+          new Error(`AppleScript execution timed out after ${timeoutMs}ms`)
+        ),
+      timeoutMs
+    );
   });
 
   try {
     const { stdout, stderr } = await Promise.race([
       execAsync(command),
-      timeoutPromise
+      timeoutPromise,
     ]);
 
     console.log("[DEBUG] executeAppleScript - stdout:", stdout);
@@ -1914,9 +1928,14 @@ delay 0.2
       // After successfully sending, mark the conversation as read (non-blocking)
       console.log("[DEBUG] send-imessage - Marking conversation as read");
       markConversationAsReadViaClick(recipient).catch((error) => {
-        console.log("[DEBUG] send-imessage - Failed to mark as read (non-critical):", error);
+        console.log(
+          "[DEBUG] send-imessage - Failed to mark as read (non-critical):",
+          error
+        );
       });
-      console.log("[DEBUG] send-imessage - Initiated mark-as-read (non-blocking)");
+      console.log(
+        "[DEBUG] send-imessage - Initiated mark-as-read (non-blocking)"
+      );
 
       return {
         success: true,
