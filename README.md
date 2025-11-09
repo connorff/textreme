@@ -49,8 +49,8 @@ pnpm install
 # run the overlay app
 pnpm dev
 
-# get contacts info to the app
-cd apps/overlay && swiftc -o contacts_dump contacts_dump.swift -target arm64-apple-macos13.0
+# get contacts info to the app (compile Swift binary for your macOS version)
+cd apps/overlay && swiftc -o contacts_dump contacts_dump.swift
 ```
 
 ### 2. ML Training Pipeline

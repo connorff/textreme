@@ -6,8 +6,10 @@
   "main": ".vite/build/main.js",
   "scripts": {
     "copy-binary": "mkdir -p .vite/build && cp contacts_dump .vite/build/contacts_dump 2>/dev/null || true",
-    "start": "npm run copy-binary && electron-forge start",
-    "dev": "npm run copy-binary && electron-forge start",
+    "build-cli": "cd ../../ml/imessage_query && cargo build --release",
+    "prebuild": "npm run build-cli",
+    "start": "npm run copy-binary && npm run build-cli && electron-forge start",
+    "dev": "npm run copy-binary && npm run build-cli && electron-forge start",
     "build": "electron-forge package",
     "package": "electron-forge package",
     "make": "electron-forge make",

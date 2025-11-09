@@ -10,6 +10,8 @@ export const useSuggestions = (
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
   const suggestionRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const cacheRef = useRef<Map<string, string[]>>(new Map());
+  const lastKeyRef = useRef<string | null>(null);
 
   // Generate AI-powered suggestions when draft changes
   useEffect(() => {
@@ -18,6 +20,22 @@ export const useSuggestions = (
       setSelectedSuggestionIndex(0);
       suggestionRefs.current = [];
       setIsTyping(false);
+      return;
+    }
+
+    const key = `${focusedConversation.guid}|${draft}`;
+
+    // If we already have suggestions for this exact draft in this conversation, reuse and bail
+    if (lastKeyRef.current === key && suggestions.length > 0) {
+      return;
+    }
+    const cached = cacheRef.current.get(key);
+    if (cached && cached.length > 0) {
+      setSuggestions(cached);
+      setSelectedSuggestionIndex(0);
+      suggestionRefs.current = new Array(cached.length).fill(null);
+      setIsTyping(false);
+      lastKeyRef.current = key;
       return;
     }
 
@@ -43,6 +61,8 @@ export const useSuggestions = (
           setSuggestions(result.suggestions);
           setSelectedSuggestionIndex(0);
           suggestionRefs.current = new Array(result.suggestions.length).fill(null);
+          cacheRef.current.set(key, result.suggestions);
+          lastKeyRef.current = key;
         } else {
           setSuggestions([]);
         }
@@ -55,7 +75,7 @@ export const useSuggestions = (
     }, 300); // Debounce by 300ms
 
     return () => clearTimeout(timeoutId);
-  }, [draft, focusedConversation, messages]);
+  }, [draft, focusedConversation?.guid]); // do not requery on message polls when draft is unchanged
 
   return {
     suggestions,

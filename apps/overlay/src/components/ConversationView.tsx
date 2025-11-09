@@ -36,7 +36,13 @@ export const ConversationView = () => {
     handleClearFocus,
   } = useViewMode();
 
-  const { messages, setMessages, messagesContainerRef, fetchMessages } = useMessages(
+  const {
+    messages,
+    setMessages,
+    messagesContainerRef,
+    fetchMessages,
+    scrollToBottom,
+  } = useMessages(
     focusedConversation,
     mode
   );
@@ -127,8 +133,8 @@ export const ConversationView = () => {
       // Clear the draft on success
       setDraft("");
       console.log("Message sent successfully!");
-      
-      // Refresh messages after a delay to allow DB to update
+      // Scroll to bottom after sending and then refresh messages shortly after
+      scrollToBottom(true);
       setTimeout(() => {
         if (focusedConversation) {
           fetchMessages(focusedConversation.guid);
@@ -216,6 +222,7 @@ export const ConversationView = () => {
               <MessageList
                 messages={messages}
                 focusedConversation={focusedConversation}
+                messagesContainerRef={messagesContainerRef}
                 agentCandidates={null}
                 onMessageSent={() => {
                   if (focusedConversation) {
