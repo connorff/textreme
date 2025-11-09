@@ -187,7 +187,7 @@ export const AgentView = ({
       <div className="flex flex-col w-[60%]">
         {/* Conversation history at the top - 70% height */}
         <div className="h-[60%] overflow-y-auto p-3">
-          <div className="space-y-2">
+          <div className="space-y-1">
             {messages.slice(-5).map((msg, msgIdx) => (
               <div
                 key={msgIdx}
@@ -266,7 +266,7 @@ export const AgentView = ({
       </div>
 
       {/* Right side - Chat with agent (30% width, full height) */}
-      <div className="flex flex-col shadow-lg w-[40%]">
+      <div className="flex flex-col w-[40%]">
         {/* Chat history - takes full height */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {chatHistory.map((msg, idx) => (
@@ -301,7 +301,7 @@ export const AgentView = ({
                 handleSendPrompt();
               }
             }}
-            placeholder="Ask the agent..."
+            placeholder="What's on your mind?"
             disabled={isLoading}
             className="border border-border disabled:opacity-50 focus:none focus:outline-none focus:ring-none px-3 py-2 rounded-lg text-xs w-full"
           />
