@@ -15,21 +15,26 @@ export async function runAgent(
 ): Promise<AgentOutput> {
   const DEBUG = process.env.TEXTREME_AGENT_DEBUG === "1";
   const system = buildInstructions(context);
+  // Allow maxSteps to be configured via environment variable (default: 2 for speed)
+  const maxSteps = process.env.TEXTREME_AGENT_MAX_STEPS
+    ? parseInt(process.env.TEXTREME_AGENT_MAX_STEPS, 10)
+    : 2;
   if (DEBUG) {
     console.log("[orchestrator] runAgent start");
     console.log(
-      `[orchestrator] model=openai:${MODEL_CONFIG.model} temperature=${AGENT_TEMPERATURE} maxSteps=8 (reasoning enabled)`
+      `[orchestrator] model=openai:${MODEL_CONFIG.model} temperature=${AGENT_TEMPERATURE} maxSteps=${maxSteps} (reasoning enabled)`
     );
     console.log(
       `[orchestrator] system preview="${system.slice(0, 200).replace(/\n/g, " ")}"...`
     );
   }
+  
   const result = await generateText({
     model: AGENT_MODEL,
     system,
     prompt: input,
     tools,
-    maxSteps: 8,
+    maxSteps,
     temperature: AGENT_TEMPERATURE,
   });
   if (DEBUG) {
@@ -82,22 +87,89 @@ export async function runAgent(
 
 export async function runAgentStream(input: string, context: AgentContext) {
   const DEBUG = process.env.TEXTREME_AGENT_DEBUG === "1";
+  // Fast mode is now DEFAULT for maximum speed
+  // Set TEXTREME_AGENT_SLOW_MODE=1 to use orchestrator
+  const SLOW_MODE = process.env.TEXTREME_AGENT_SLOW_MODE === "1";
+  
+  // Fast mode: bypass orchestrator and directly call the tool (DEFAULT)
+  if (!SLOW_MODE) {
+    if (DEBUG) {
+      console.log("[orchestrator] Fast mode enabled - bypassing orchestrator");
+    }
+    
+    // Build a minimal prompt for maximum speed
+    const name = context.contactName ?? "Recipient";
+    // Use only last 3 messages for faster processing
+    const lastMessages = context.conversation.slice(-3);
+    const conversationContext = lastMessages
+      .map((m) => `${m.isFromMe ? "You" : name}: ${m.text || "[No text]"}`)
+      .join("\n");
+    
+    // Ultra-minimal prompt for fastest generation
+    const constructionPrompt = `Conversation:
+${conversationContext}
+
+Request: ${input}
+
+Generate 4 short, lowercase replies (no emojis, no em-dashes). Vary tone.`;
+
+    // Directly call the tool
+    const { construct_final_response } = await import("./tools");
+    const toolResult = await construct_final_response.execute({ constructionPrompt });
+    
+    // Return a mock stream that immediately yields the result
+    // Match the stream format expected by the frontend
+    return {
+      textStream: (async function* () {
+        // Empty text stream for fast mode
+      })(),
+      fullStream: (async function* () {
+        // Emit tool call event
+        yield {
+          type: "tool-call" as const,
+          toolName: "construct_final_response",
+          args: { constructionPrompt },
+        };
+        // Emit tool result event
+        yield {
+          type: "tool-result" as const,
+          toolName: "construct_final_response",
+          result: toolResult,
+        };
+        // Emit finish event
+        yield {
+          type: "finish" as const,
+          finishReason: "stop",
+        };
+      })(),
+      async getFinalOutput(): Promise<AgentOutput> {
+        return toolResult;
+      },
+    };
+  }
+  
+  // Normal mode: use orchestrator
   const system = buildInstructions(context);
+  // Allow maxSteps to be configured via environment variable (default: 2 for speed)
+  const maxSteps = process.env.TEXTREME_AGENT_MAX_STEPS
+    ? parseInt(process.env.TEXTREME_AGENT_MAX_STEPS, 10)
+    : 2;
   if (DEBUG) {
     console.log("[orchestrator] runAgentStream start");
     console.log(
-      `[orchestrator] model=openai:${MODEL_CONFIG.model} temperature=${AGENT_TEMPERATURE} maxSteps=8 (reasoning enabled)`
+      `[orchestrator] model=openai:${MODEL_CONFIG.model} temperature=${AGENT_TEMPERATURE} maxSteps=${maxSteps} (reasoning enabled)`
     );
     console.log(
       `[orchestrator] system preview="${system.slice(0, 200).replace(/\n/g, " ")}"...`
     );
   }
+  
   const result = await streamText({
     model: AGENT_MODEL,
     system,
     prompt: input,
     tools,
-    maxSteps: 8,
+    maxSteps,
     temperature: AGENT_TEMPERATURE,
   });
 

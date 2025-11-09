@@ -36,7 +36,13 @@ export const ConversationView = () => {
     handleClearFocus,
   } = useViewMode();
 
-  const { messages, setMessages, messagesContainerRef, scrollToBottom } = useMessages(
+  const {
+    messages,
+    setMessages,
+    messagesContainerRef,
+    fetchMessages,
+    scrollToBottom,
+  } = useMessages(
     focusedConversation,
     mode
   );
@@ -127,8 +133,13 @@ export const ConversationView = () => {
       // Clear the draft on success
       setDraft("");
       console.log("Message sent successfully!");
-      // Scroll to bottom after sending
+      // Scroll to bottom after sending and then refresh messages shortly after
       scrollToBottom(true);
+      setTimeout(() => {
+        if (focusedConversation) {
+          fetchMessages(focusedConversation.guid);
+        }
+      }, 1000);
     } else {
       console.error("Failed to send message:", result.error);
       // TODO: Show error to user
@@ -157,6 +168,8 @@ export const ConversationView = () => {
     handleClearFocus: handleClearFocusWithCleanup,
     handleSuggestionClick,
     handleSendMessage,
+    handleAgentClick,
+    handleTabClick,
   });
 
   return (
@@ -180,6 +193,11 @@ export const ConversationView = () => {
               focusedConversation={focusedConversation}
               messages={messages}
               onFinalOutputChange={setAgentFinalOutput}
+              onMessageSent={() => {
+                if (focusedConversation) {
+                  fetchMessages(focusedConversation.guid);
+                }
+              }}
             />
           </div>
         </div>
@@ -206,6 +224,11 @@ export const ConversationView = () => {
                 focusedConversation={focusedConversation}
                 messagesContainerRef={messagesContainerRef}
                 agentCandidates={null}
+                onMessageSent={() => {
+                  if (focusedConversation) {
+                    fetchMessages(focusedConversation.guid);
+                  }
+                }}
               />
             )}
 
@@ -264,6 +287,11 @@ export const ConversationView = () => {
                   focusedConversation={focusedConversation}
                   messagesContainerRef={messagesContainerRef}
                   showInChatbox={true}
+                  onMessageSent={() => {
+                    if (focusedConversation) {
+                      fetchMessages(focusedConversation.guid);
+                    }
+                  }}
                 />
               </div>
             )}

@@ -73,12 +73,14 @@ export const useViewMode = ({ onModeChange }: UseViewModeProps = {}) => {
   const handleSelectConversation = useCallback(
     (conversation: UnreadConversation) => {
       setFocusedConversation(conversation);
-      setModeWithCallback(composeMode);
+      // Always go to tab mode when selecting a conversation
+      setComposeMode("tab");
+      setModeWithCallback("tab");
       requestAnimationFrame(() => {
-        window.electronAPI.resizeWindow(500);
+        window.electronAPI.resizeWindow(500, 600);
       });
     },
-    [composeMode, setModeWithCallback]
+    [setModeWithCallback]
   );
 
   const handleClearFocus = useCallback(() => {

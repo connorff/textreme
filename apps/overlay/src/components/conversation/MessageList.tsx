@@ -17,6 +17,7 @@ interface MessageListProps {
   messagesContainerRef?: RefObject<HTMLDivElement>;
   showInChatbox?: boolean;
   agentCandidates?: AgentOutput | null;
+  onMessageSent?: () => void;
 }
 
 export const MessageList = ({
@@ -25,6 +26,7 @@ export const MessageList = ({
   messagesContainerRef,
   showInChatbox = false,
   agentCandidates,
+  onMessageSent,
 }: MessageListProps) => {
   const candidatesRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -37,10 +39,27 @@ export const MessageList = ({
 
   const handleSelectCandidate = async (message: string) => {
     const recipient = focusedConversation.chatIdentifier || "";
+    console.log("[AGENT MODE] handleSelectCandidate called:", {
+      recipient,
+      message,
+      recipientLength: recipient.length,
+      messageLength: message.length,
+      conversationGuid: focusedConversation.guid,
+      chatIdentifier: focusedConversation.chatIdentifier,
+    });
     try {
-      await window.electronAPI.sendIMessage(recipient, message);
+      const result = await window.electronAPI.sendIMessage(recipient, message);
+      console.log("[AGENT MODE] sendIMessage result:", result);
+      if (result.success) {
+        // Refresh messages after a delay to allow DB to update
+        setTimeout(() => {
+          onMessageSent?.();
+        }, 1000);
+      } else {
+        console.error("[AGENT MODE] sendIMessage failed:", result.error);
+      }
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("[AGENT MODE] Error sending message:", error);
     }
   };
 

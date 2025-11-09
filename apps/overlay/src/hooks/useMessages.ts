@@ -48,26 +48,27 @@ export const useMessages = (
 
   // Fetch messages when conversation is focused
   useEffect(() => {
-    if (focusedConversation && (mode === "tab" || mode === "conversation")) {
+    if (focusedConversation && (mode === "tab" || mode === "conversation" || mode === "agent")) {
       setIsInitialLoad(true);
       fetchMessages(focusedConversation.guid);
     }
   }, [focusedConversation, mode, fetchMessages]);
 
-  // Poll for new messages
+  // Poll for new messages when conversation is focused (no scroll on poll)
   useEffect(() => {
-    if (!focusedConversation || (mode !== "tab" && mode !== "conversation")) {
+    if (!focusedConversation || (mode !== "tab" && mode !== "conversation" && mode !== "agent")) {
       return;
     }
 
-    const interval = setInterval(() => {
-      // Do not auto-scroll on poll updates
-      setIsInitialLoad(false);
+    const intervalId = setInterval(() => {
+      setIsInitialLoad(false); // prevent scroll during polls
       fetchMessages(focusedConversation.guid);
     }, pollInterval);
 
-    return () => clearInterval(interval);
-  }, [focusedConversation, mode, pollInterval, fetchMessages]);
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [focusedConversation, mode, fetchMessages]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
