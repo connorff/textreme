@@ -12,18 +12,127 @@ This pipeline:
 import sqlite3
 import os
 import re
+import time
+import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict
 import json
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dotenv import load_dotenv
+
+load_dotenv()
 
 try:
-    from openai import OpenAI
+    from tqdm import tqdm
+except ImportError:
+    # Fallback if tqdm not installed
+    class tqdm:
+        def __init__(self, iterable=None, total=None, desc=None, **kwargs):
+            self.iterable = iterable
+            self.total = total
+            self.desc = desc
+            self.n = 0
+        
+        def __iter__(self):
+            return iter(self.iterable)
+        
+        def __enter__(self):
+            return self
+        
+        def __exit__(self, *args):
+            pass
+        
+        def update(self, n=1):
+            self.n += n
+        
+        def set_description(self, desc):
+            self.desc = desc
+        
+        def close(self):
+            pass
+
+try:
+    from openai import OpenAI, RateLimitError
 except ImportError:
     print("OpenAI package not installed. Run: pip install openai")
     OpenAI = None
+    RateLimitError = None
+
+
+class OpenAIKeyManager:
+    """Manages multiple OpenAI API keys with automatic failover on rate limits"""
+    
+    def __init__(self, api_keys: List[str]):
+        if not api_keys:
+            raise ValueError("At least one API key is required")
+        
+        self.api_keys = api_keys
+        self.clients = [OpenAI(api_key=key) for key in api_keys]
+        self.current_index = 0
+        self.cooldown_until = [0.0] * len(api_keys)  # Timestamp when each key is available again
+        self.lock = threading.Lock()
+        self.cooldown_duration = 60  # Cooldown period in seconds
+        
+        print(f"🔑 Initialized with {len(api_keys)} OpenAI API key(s)")
+    
+    def get_client(self) -> OpenAI:
+        """Get an available OpenAI client, switching if current is on cooldown"""
+        with self.lock:
+            current_time = time.time()
+            
+            # Find first available key (not in cooldown)
+            for _ in range(len(self.api_keys)):
+                if current_time >= self.cooldown_until[self.current_index]:
+                    return self.clients[self.current_index]
+                
+                # Current key is in cooldown, try next
+                self.current_index = (self.current_index + 1) % len(self.api_keys)
+            
+            # All keys in cooldown, use the one with shortest remaining cooldown
+            min_cooldown_idx = min(range(len(self.cooldown_until)), key=lambda i: self.cooldown_until[i])
+            wait_time = self.cooldown_until[min_cooldown_idx] - current_time
+            
+            if wait_time > 0:
+                print(f"⏳ All API keys in cooldown. Waiting {wait_time:.1f}s...")
+                time.sleep(wait_time)
+            
+            self.current_index = min_cooldown_idx
+            return self.clients[self.current_index]
+    
+    def mark_rate_limited(self):
+        """Mark current key as rate limited and switch to next"""
+        with self.lock:
+            key_num = self.current_index + 1
+            print(f"⚠️  API Key #{key_num} rate limited. Cooling down for {self.cooldown_duration}s...")
+            
+            self.cooldown_until[self.current_index] = time.time() + self.cooldown_duration
+            
+            # Switch to next key
+            old_index = self.current_index
+            self.current_index = (self.current_index + 1) % len(self.api_keys)
+            
+            if len(self.api_keys) > 1:
+                print(f"🔄 Switched from Key #{old_index + 1} to Key #{self.current_index + 1}")
+    
+    def call_with_retry(self, func, *args, max_retries: int = 3, **kwargs):
+        """Call OpenAI API with automatic key switching on rate limits"""
+        for attempt in range(max_retries):
+            try:
+                client = self.get_client()
+                # Replace 'self.client' with the current client in kwargs
+                return func(client, *args, **kwargs)
+            except Exception as e:
+                error_str = str(e).lower()
+                if 'rate' in error_str and 'limit' in error_str:
+                    self.mark_rate_limited()
+                    if attempt < max_retries - 1:
+                        continue
+                raise
+        
+        raise Exception(f"Failed after {max_retries} retries")
 
 
 @dataclass
@@ -105,6 +214,7 @@ class ChatDatabase:
         cursor = conn.cursor()
         
         # Use chat_message_join to properly link messages to chats and handles
+        # Filter for 1:1 chats only (style = 45) to exclude group chats
         query = """
         SELECT 
             h.id as handle_id,
@@ -117,6 +227,7 @@ class ChatDatabase:
         INNER JOIN handle h ON chj.handle_id = h.ROWID
         WHERE m.date > ?
             AND m.item_type = 0
+            AND c.style = 45
         GROUP BY h.id
         ORDER BY message_count DESC
         LIMIT ?
@@ -129,7 +240,7 @@ class ChatDatabase:
         return results
     
     def get_messages_for_contact(self, handle_id: str, months: int = 6) -> List[Message]:
-        """Get all messages for a specific contact in the last N months"""
+        """Get all messages for a specific contact in the last N months (1:1 chats only)"""
         cutoff_date = datetime.now() - timedelta(days=months * 30)
         cutoff_timestamp = int((cutoff_date - datetime(2001, 1, 1)).total_seconds() * 1e9)
         
@@ -138,7 +249,8 @@ class ChatDatabase:
         cursor = conn.cursor()
         
         # Fetch both text and attributedBody to handle rich text messages
-        # Apply multiple filters to get only substantive conversational messages
+        # Filter for 1:1 chats only (exclude group chats)
+        # In iMessage: style 45 = one-on-one, style 43 = group chat
         query = """
         SELECT 
             m.text,
@@ -147,7 +259,9 @@ class ChatDatabase:
             m.date,
             h.id as handle_id
         FROM message m
-        JOIN handle h ON m.handle_id = h.ROWID
+        INNER JOIN chat_message_join cmj ON m.ROWID = cmj.message_id
+        INNER JOIN chat c ON cmj.chat_id = c.ROWID
+        INNER JOIN handle h ON m.handle_id = h.ROWID
         WHERE h.id = ? 
             AND m.date > ? 
             AND m.item_type = 0                     -- Only regular messages (not group events, etc.)
@@ -155,6 +269,7 @@ class ChatDatabase:
             AND m.is_finished = 1                   -- Only completed messages
             AND m.is_system_message = 0             -- No system messages (location sharing, etc.)
             AND m.associated_message_guid IS NULL   -- No reactions/tapbacks
+            AND c.style = 45                        -- Only one-on-one chats (exclude group chats)
         ORDER BY m.date ASC
         """
         
@@ -402,15 +517,29 @@ class ChatDatabase:
 class MemoryPipeline:
     """Pipeline to generate memory summaries for contacts"""
     
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
-        if not self.api_key:
-            raise ValueError("OpenAI API key required. Set OPENAI_API_KEY environment variable.")
-        
+    def __init__(self, api_keys: Optional[List[str]] = None):
         if OpenAI is None:
             raise ImportError("OpenAI package not installed")
         
-        self.client = OpenAI(api_key=self.api_key)
+        # Load API keys from environment or arguments
+        if api_keys is None:
+            api_keys = []
+            # Try loading multiple keys
+            for i in range(1, 10):  # Support up to 9 keys
+                key = os.environ.get(f"OPENAI_API_KEY_{i}")
+                if key:
+                    api_keys.append(key)
+            
+            # Fallback to single key
+            if not api_keys:
+                single_key = os.environ.get("OPENAI_API_KEY")
+                if single_key:
+                    api_keys.append(single_key)
+        
+        if not api_keys:
+            raise ValueError("At least one OpenAI API key required. Set OPENAI_API_KEY or OPENAI_API_KEY_1, OPENAI_API_KEY_2, etc.")
+        
+        self.key_manager = OpenAIKeyManager(api_keys)
         self.db = ChatDatabase()
     
     @staticmethod
@@ -512,8 +641,8 @@ Messages ({len(messages)} total, showing first 150):
 
 Provide a detailed, factual summary. Include ALL specific names, places, companies, dates, and concrete details mentioned. Be comprehensive."""
         
-        try:
-            response = self.client.chat.completions.create(
+        def make_api_call(client):
+            return client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that extracts specific facts and details from conversations. Focus on concrete information like names, places, dates, and outcomes."},
@@ -522,7 +651,9 @@ Provide a detailed, factual summary. Include ALL specific names, places, compani
                 temperature=0.5,
                 max_tokens=500
             )
-            
+        
+        try:
+            response = self.key_manager.call_with_retry(make_api_call)
             summary = response.choices[0].message.content
             
             return {
@@ -593,8 +724,8 @@ Date range: {messages[0].timestamp.date()} to {messages[-1].timestamp.date()}
 
 Provide comprehensive monthly highlights with ALL specific facts, names, places, dates mentioned. Be thorough and detailed."""
         
-        try:
-            response = self.client.chat.completions.create(
+        def make_api_call(client):
+            return client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that extracts detailed, specific facts from conversations. Focus on concrete information: names of people/places/companies, specific dates, outcomes, and factual details. Be comprehensive and thorough."},
@@ -603,7 +734,9 @@ Provide comprehensive monthly highlights with ALL specific facts, names, places,
                 temperature=0.5,
                 max_tokens=800
             )
-            
+        
+        try:
+            response = self.key_manager.call_with_retry(make_api_call)
             highlights = response.choices[0].message.content
             
             return {
@@ -790,8 +923,8 @@ Return ONLY a valid JSON array in this exact format:
 
 Return ONLY the JSON array, no other text."""
         
-        try:
-            response = self.client.chat.completions.create(
+        def make_api_call(client):
+            return client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that extracts concrete facts and specific information from conversations. Focus only on factual details like names, places, companies, outcomes. Always respond with valid JSON only."},
@@ -800,7 +933,9 @@ Return ONLY the JSON array, no other text."""
                 temperature=0.5,  # Lower temp for more factual extraction
                 max_tokens=2000
             )
-            
+        
+        try:
+            response = self.key_manager.call_with_retry(make_api_call)
             result_text = response.choices[0].message.content.strip()
             
             # Try to parse JSON
@@ -858,16 +993,18 @@ Timespan: {messages[0].timestamp.date()} to {messages[-1].timestamp.date()}
 Sample conversation:
 {conversation_text}
 
-Format your response as JSON:
+Return ONLY a valid JSON object in this exact format (no markdown, no code blocks):
 {{
   "relationship_type": "...",
   "description": "...",
   "important_moments": ["...", "..."],
   "milestones": ["...", "..."]
-}}"""
+}}
+
+Return ONLY the JSON object, no other text."""
         
-        try:
-            response = self.client.chat.completions.create(
+        def make_api_call(client):
+            return client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a helpful assistant that analyzes relationships. Always respond with valid JSON."},
@@ -876,12 +1013,23 @@ Format your response as JSON:
                 temperature=0.7,
                 max_tokens=600
             )
+        
+        try:
+            response = self.key_manager.call_with_retry(make_api_call)
+            result_text = response.choices[0].message.content.strip()
             
-            result_text = response.choices[0].message.content
             # Try to parse JSON from response
             try:
+                # Remove markdown code blocks if present
+                if result_text.startswith("```"):
+                    result_text = result_text.split("```")[1]
+                    if result_text.startswith("json"):
+                        result_text = result_text[4:]
+                    result_text = result_text.strip()
+                
                 result = json.loads(result_text)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
+                print(f"  Warning: Could not parse relationship JSON: {e}")
                 # If not valid JSON, create structured response
                 result = {
                     "relationship_type": "unknown",
@@ -900,14 +1048,14 @@ Format your response as JSON:
                 "milestones": []
             }
     
-    def process_contact(self, contact: Dict[str, Any]) -> ContactMemory:
+    def process_contact(self, contact: Dict[str, Any], show_progress: bool = False) -> ContactMemory:
         """Process a single contact and generate their memory"""
         handle_id = contact['handle_id']
-        print(f"\nProcessing contact: {handle_id}")
         
         # Get messages
+        print(f"[{handle_id}] Loading messages...", flush=True)
         messages = self.db.get_messages_for_contact(handle_id)
-        print(f"  Found {len(messages)} messages")
+        print(f"[{handle_id}] Loaded {len(messages)} messages", flush=True)
         
         if not messages:
             # Create default texting style
@@ -938,39 +1086,53 @@ Format your response as JSON:
             )
         
         # Chunk by week
+        print(f"[{handle_id}] Chunking by week...", flush=True)
         weekly_chunks = self.chunk_messages_by_week(messages)
-        print(f"  Chunked into {len(weekly_chunks)} weeks")
         
         # Summarize each week
         week_summaries = []
-        for week_key in sorted(weekly_chunks.keys()):
-            print(f"    Summarizing {week_key}...")
+        weeks_list = sorted(weekly_chunks.keys())
+        if show_progress:
+            week_iter = tqdm(weeks_list, desc="📅 Weekly summaries", leave=False)
+        else:
+            week_iter = weeks_list
+        
+        for week_key in week_iter:
             summary = self.summarize_week(week_key, weekly_chunks[week_key])
             week_summaries.append(summary)
+        print(f"[{handle_id}] Weekly summaries complete ({len(week_summaries)} weeks)", flush=True)
         
         # Chunk by month
+        print(f"[{handle_id}] Chunking by month...", flush=True)
         monthly_chunks = self.chunk_messages_by_month(messages)
-        print(f"  Generating highlights for {len(monthly_chunks)} months")
         
         # Generate monthly highlights
         month_highlights = []
-        for month_key in sorted(monthly_chunks.keys()):
-            print(f"    Highlighting {month_key}...")
+        months_list = sorted(monthly_chunks.keys())
+        if show_progress:
+            month_iter = tqdm(months_list, desc="📊 Monthly highlights", leave=False)
+        else:
+            month_iter = months_list
+        
+        for month_key in month_iter:
             highlights = self.generate_month_highlights(month_key, monthly_chunks[month_key])
             month_highlights.append(highlights)
+        print(f"[{handle_id}] Monthly highlights complete ({len(month_highlights)} months)", flush=True)
         
         # Analyze texting style
-        print(f"  Analyzing texting style...")
+        print(f"[{handle_id}] Analyzing texting style...", flush=True)
         texting_style = self.analyze_texting_style(messages)
+        print(f"[{handle_id}] Texting style analyzed", flush=True)
         
         # Extract specific moments with dates and quotes
-        print(f"  Extracting specific moments...")
+        print(f"[{handle_id}] Extracting specific moments...", flush=True)
         specific_moments = self.extract_specific_moments(messages)
-        print(f"  Found {len(specific_moments)} specific moments")
+        print(f"[{handle_id}] Extracted {len(specific_moments)} moments", flush=True)
         
         # Analyze relationship
-        print(f"  Analyzing relationship...")
+        print(f"[{handle_id}] Analyzing relationship...", flush=True)
         relationship_data = self.analyze_relationship(messages)
+        print(f"[{handle_id}] Relationship analysis complete", flush=True)
         
         # Create memory object
         memory = ContactMemory(
@@ -991,59 +1153,134 @@ Format your response as JSON:
         
         return memory
     
-    def run(self, output_dir: str = "./memory_output", top_n: int = 20):
-        """Run the full pipeline"""
-        print("Starting Memory Pipeline...")
-        print(f"Output directory: {output_dir}")
+    def _update_status(self, pbar, pbar_lock, contact_id: str, step: str):
+        """Thread-safe status update"""
+        if pbar and pbar_lock:
+            with pbar_lock:
+                pbar.set_postfix_str(f"{step}: {contact_id[-12:]}")
+    
+    def _process_and_save_contact(self, contact: Dict[str, Any], contact_num: int, total: int, output_dir: str, pbar: Optional[tqdm] = None, pbar_lock: Optional[threading.Lock] = None) -> Optional[ContactMemory]:
+        """Process a single contact and save to file (for parallel execution)"""
+        contact_id = contact['handle_id']
+        
+        try:
+            # Process the contact
+            self._update_status(pbar, pbar_lock, contact_id, "Processing")
+            memory = self.process_contact(contact, show_progress=False)
+            
+            if memory.total_messages == 0:
+                self._update_status(pbar, pbar_lock, contact_id, "No messages")
+                if pbar and pbar_lock:
+                    with pbar_lock:
+                        pbar.update(1)
+                return None
+            
+            # Save individual contact memory
+            self._update_status(pbar, pbar_lock, contact_id, "Saving")
+            memory_dict = asdict(memory)
+            memory_dict['texting_style_summary'] = self.format_texting_style_summary(memory.texting_style)
+            
+            contact_file = Path(output_dir) / f"{memory.contact_id.replace('/', '_')}.json"
+            with open(contact_file, 'w') as f:
+                json.dump(memory_dict, f, indent=2)
+            
+            # Update progress bar thread-safely
+            self._update_status(pbar, pbar_lock, contact_id, f"Done ({memory.total_messages} msgs)")
+            if pbar and pbar_lock:
+                with pbar_lock:
+                    pbar.update(1)
+            
+            return memory
+            
+        except Exception as e:
+            # Update progress bar thread-safely
+            self._update_status(pbar, pbar_lock, contact_id, "Error")
+            if pbar and pbar_lock:
+                with pbar_lock:
+                    pbar.update(1)
+            
+            print(f"\n❌ Error processing {contact_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def run(self, output_dir: str = "./memory_output", top_n: int = 20, max_workers: int = 10):
+        """Run the full pipeline with parallel processing"""
+        print("\n" + "="*70)
+        print("🚀 MEMORY PIPELINE - Starting".center(70))
+        print("="*70)
+        print(f"📁 Output: {output_dir}")
+        print(f"⚙️  Workers: {max_workers} parallel")
+        print(f"🎯 Target: Top {top_n} contacts")
         
         # Create output directory
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         
         # Get top contacts
-        print(f"\nFinding top {top_n} contacts from last 6 months...")
+        print(f"\n🔍 Finding top {top_n} contacts from last 6 months...")
         contacts = self.db.get_top_contacts(limit=top_n, months=6)
-        print(f"Found {len(contacts)} contacts to process")
+        print(f"✅ Found {len(contacts)} contacts to process")
         
-        # Process each contact
+        # Process contacts in parallel with progress bar
+        print(f"\n{'='*70}")
+        print(f"⚡ Processing {len(contacts)} contacts in parallel...")
+        print(f"{'='*70}\n")
+        
         all_memories = []
-        for i, contact in enumerate(contacts, 1):
-            print(f"\n{'='*60}")
-            print(f"Processing contact {i}/{len(contacts)}")
-            print(f"{'='*60}")
+        pbar_lock = threading.Lock()
+        
+        with tqdm(total=len(contacts), desc="📱 Overall Progress", 
+                 bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]',
+                 ncols=80) as pbar:
             
-            try:
-                memory = self.process_contact(contact)
-                all_memories.append(memory)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all tasks
+                future_to_contact = {
+                    executor.submit(
+                        self._process_and_save_contact, 
+                        contact, 
+                        i, 
+                        len(contacts), 
+                        output_dir,
+                        pbar,
+                        pbar_lock
+                    ): contact 
+                    for i, contact in enumerate(contacts, 1)
+                }
                 
-                # Save individual contact memory with human-readable style summary
-                memory_dict = asdict(memory)
-                memory_dict['texting_style_summary'] = self.format_texting_style_summary(memory.texting_style)
-                
-                contact_file = Path(output_dir) / f"{memory.contact_id.replace('/', '_')}.json"
-                with open(contact_file, 'w') as f:
-                    json.dump(memory_dict, f, indent=2)
-                
-                print(f"  Saved to {contact_file}")
-            except Exception as e:
-                print(f"  Error processing contact: {e}")
-                import traceback
-                traceback.print_exc()
+                # Collect results as they complete
+                for future in as_completed(future_to_contact):
+                    memory = future.result()
+                    if memory:
+                        all_memories.append(memory)
         
         # Save summary of all contacts with style summaries
+        print(f"\n{'='*70}")
+        print("💾 Saving summary file...")
         summary_file = Path(output_dir) / "memory_summary.json"
-        with open(summary_file, 'w') as f:
+        
+        with tqdm(total=len(all_memories), desc="📝 Writing summary", leave=False) as pbar:
             all_memories_dict = []
             for m in all_memories:
                 mem_dict = asdict(m)
                 mem_dict['texting_style_summary'] = self.format_texting_style_summary(m.texting_style)
                 all_memories_dict.append(mem_dict)
-            json.dump(all_memories_dict, f, indent=2)
+                pbar.update(1)
+            
+            with open(summary_file, 'w') as f:
+                json.dump(all_memories_dict, f, indent=2)
         
-        print(f"\n{'='*60}")
-        print(f"Pipeline complete!")
-        print(f"Processed {len(all_memories)} contacts")
-        print(f"Summary saved to {summary_file}")
-        print(f"{'='*60}")
+        print(f"✅ Summary saved")
+        
+        # Final summary
+        print(f"\n{'='*70}")
+        print("✨ PIPELINE COMPLETE!".center(70))
+        print("="*70)
+        print(f"✅ Successfully processed: {len(all_memories)}/{len(contacts)} contacts")
+        print(f"📊 Total messages analyzed: {sum(m.total_messages for m in all_memories):,}")
+        print(f"📁 Output directory: {output_dir}")
+        print(f"📄 Summary file: {summary_file}")
+        print("="*70 + "\n")
 
 
 def main():
@@ -1053,14 +1290,20 @@ def main():
     parser = argparse.ArgumentParser(description="Memory Pipeline for iMessage contacts")
     parser.add_argument("--output", "-o", default="./memory_output", help="Output directory")
     parser.add_argument("--top", "-n", type=int, default=20, help="Number of top contacts to process")
+    parser.add_argument("--workers", "-w", type=int, default=10, help="Number of parallel workers (default: 10)")
     parser.add_argument("--api-key", help="OpenAI API key (or set OPENAI_API_KEY env var)")
     parser.add_argument("--db-path", help="Path to chat.db (default: ~/Library/Messages/chat.db)")
     
     args = parser.parse_args()
     
     try:
-        pipeline = MemoryPipeline(api_key=args.api_key)
-        pipeline.run(output_dir=args.output, top_n=args.top)
+        # Handle API key argument
+        api_keys = None
+        if args.api_key:
+            api_keys = [args.api_key]
+        
+        pipeline = MemoryPipeline(api_keys=api_keys)
+        pipeline.run(output_dir=args.output, top_n=args.top, max_workers=args.workers)
     except Exception as e:
         print(f"Error: {e}")
         import traceback

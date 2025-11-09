@@ -4,6 +4,9 @@ dist/
 ml/.venv/
 *.log
 .DS_Store
-.env
+
 memory/.venv/
 memory/my_memories/
+
+.env
+my_memories
