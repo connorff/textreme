@@ -50,26 +50,18 @@ export const construct_final_response = tool({
       console.log(`[tools] prompt preview: "${preview}"...`);
     }
     try {
+      // Optimized system prompt for faster generation
       const { object } = await generateObject({
         model: CONSTRUCTOR_MODEL,
         schema: AgentOutputSchema,
         system: [
-          "You generate natural iMessage reply options.",
-          "Create exactly 4 diverse candidates that:",
-          "- Directly respond to what was said",
-          "- Match the specified tone and style",
-          "- Are short and natural (like real texts)",
-          "- Vary in approach/tone/length",
-          "",
-          "CRITICAL: DO NOT include emojis in the message text. Generate plain text only.",
-          "",
-          "For each candidate provide:",
-          "- message: The actual text to send (NO EMOJIS)",
-          "- reasoning: Brief explanation of the approach/tone",
-          "- confidence: Float 0-1 (how appropriate this reply is)",
+          "Generate 4 short iMessage replies. Lowercase, no emojis, no em-dashes.",
+          "Vary tone. Each: message (text), reasoning (brief), confidence (0-1).",
         ].join("\n"),
         prompt: constructionPrompt,
         temperature: CONSTRUCTOR_TEMPERATURE,
+        // Reduce maxTokens for faster generation (responses are short anyway)
+        maxTokens: 200,
       });
       if (DEBUG) {
         console.log(

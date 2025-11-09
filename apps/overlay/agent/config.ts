@@ -1,4 +1,6 @@
-const DEFAULT_MODEL = "gpt-5-mini";
+// Default to faster model for better performance
+// gpt-4o-mini is faster and cheaper than gpt-5-mini
+const DEFAULT_MODEL = "gpt-4o-mini";
 
 function resolveModelId(): string {
   const raw = process.env.TEXTREME_AGENT_MODEL
@@ -17,7 +19,8 @@ function resolveTemperature(isGpt5: boolean): number {
   if (Number.isFinite(rawTemp)) {
     return rawTemp;
   }
-  return 1;
+  // Lower temperature (0.7) for faster, more deterministic generation
+  return 0.7;
 }
 
 export function getAgentModelConfig() {
