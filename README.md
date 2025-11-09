@@ -24,17 +24,22 @@ textreme/
 ### 1. Overlay App
 
 #### Allow Access to iMessage Database
+
 - Open System Settings
 - Open Privacy & Security -> Full Disk Access
 - Allow for whichever app in which you run `pnpm dev` (typically your IDE or terminal)
 
 #### Install & Run
+
 ```bash
 # install dependencies
-pnpm install 
+pnpm install
 
 # run the overlay app
 pnpm dev
+
+# get contacts info to the app
+cd apps/overlay && swiftc -o contacts_dump contacts_dump.swift -target arm64-apple-macos13.0
 ```
 
 ### 2. ML Training Pipeline
@@ -42,6 +47,7 @@ pnpm dev
 Fine-tune LLaMA 3.1 8B on your text messages to predict responses.
 
 #### Quick Start
+
 ```bash
 cd ml
 
@@ -77,7 +83,6 @@ uv run modal run -m ml.training.train --data=data/training_data.jsonl
 ```
 
 Monitor training at https://wandb.ai/
-
 
 ## Documentation
 

@@ -1,4 +1,5 @@
 import type { UnreadConversation, ConversationMessage } from "../types/electron";
+import { formatPhoneNumber } from "./phone-utils";
 
 export interface MessageGroup {
   senderId: string;
@@ -8,14 +9,27 @@ export interface MessageGroup {
 }
 
 export const getDisplayName = (conversation: UnreadConversation): string => {
+  // First, check if any message has a contact name
+  for (const message of conversation.unreadMessages) {
+    if (message.contactName) {
+      return message.contactName;
+    }
+  }
+  
+  // Then check conversation display name
   if (conversation.displayName) {
     return conversation.displayName;
   }
-  const firstMessage = conversation.unreadMessages[0];
-  if (firstMessage?.contactName) {
-    return firstMessage.contactName;
+  
+  // Finally, format the phone number nicely
+  const identifier = conversation.chatIdentifier || "Unknown";
+  
+  // Check if it looks like a phone number
+  if (identifier.match(/^[\d+\-() ]+$/)) {
+    return formatPhoneNumber(identifier);
   }
-  return conversation.chatIdentifier || "Unknown";
+  
+  return identifier;
 };
 
 export const getLatestMessage = (conversation: UnreadConversation): string => {
