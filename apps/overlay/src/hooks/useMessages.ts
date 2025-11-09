@@ -25,9 +25,26 @@ export const useMessages = (
 
   // Fetch messages when conversation is focused
   useEffect(() => {
-    if (focusedConversation && (mode === "tab" || mode === "conversation")) {
+    if (focusedConversation && (mode === "tab" || mode === "conversation" || mode === "agent")) {
       fetchMessages(focusedConversation.guid);
     }
+  }, [focusedConversation, mode, fetchMessages]);
+
+  // Poll for new messages every second when conversation is focused
+  useEffect(() => {
+    if (!focusedConversation || (mode !== "tab" && mode !== "conversation" && mode !== "agent")) {
+      return;
+    }
+
+    // Set up polling interval (1 second)
+    const intervalId = setInterval(() => {
+      fetchMessages(focusedConversation.guid);
+    }, 1000);
+
+    // Cleanup interval on unmount or when conversation/mode changes
+    return () => {
+      clearInterval(intervalId);
+    };
   }, [focusedConversation, mode, fetchMessages]);
 
   // Auto-scroll to bottom when messages change
