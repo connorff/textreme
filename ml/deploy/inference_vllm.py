@@ -33,23 +33,41 @@ def get_model_path_from_run(path: Path) -> Path:
 )
 @modal.concurrent(max_inputs=30)
 class Inference:
-    run_name: str = modal.parameter()
     run_dir: str = modal.parameter(default="/runs")
 
     @modal.enter()
     def init(self):
         from transformers import AutoTokenizer
+        import os
         
-        if self.run_name:
-            path = Path(self.run_dir) / self.run_name
+        # Get run_name from environment variable (set during modal deploy)
+        # or pick the last run automatically
+        run_name = os.environ.get("MODAL_RUN_NAME", "")
+        
+        if run_name:
+            path = Path(self.run_dir) / run_name
             VOLUME_CONFIG[self.run_dir].reload()
             model_path = get_model_path_from_run(path)
+            print(
+                Colors.GREEN,
+                Colors.BOLD,
+                f"🧠: Using configured run: {run_name}",
+                Colors.END,
+                sep="",
+            )
         else:
             # pick the last run automatically
             run_paths = list(Path(self.run_dir).iterdir())
             for path in sorted(run_paths, reverse=True):
                 model_path = get_model_path_from_run(path)
                 if model_path.exists():
+                    print(
+                        Colors.GREEN,
+                        Colors.BOLD,
+                        f"🧠: Auto-selected run: {path.name}",
+                        Colors.END,
+                        sep="",
+                    )
                     break
 
         print(
@@ -163,17 +181,23 @@ class Inference:
 
 @app.local_entrypoint()
 def inference_main(run_name: str = "", prompt: str = "", sender: str = "ME"):
+    import os
+    
+    # Set the run_name as an environment variable so the class can pick it up
+    if run_name:
+        os.environ["MODAL_RUN_NAME"] = run_name
+    
     if not prompt:
         prompt = input(
             "Enter a prompt (conversation context):\n"
         )
 
     print(
-        Colors.GREEN, Colors.BOLD, f"🧠: Querying model {run_name} (predicting {sender})", Colors.END, sep=""
+        Colors.GREEN, Colors.BOLD, f"🧠: Querying model (predicting {sender})", Colors.END, sep=""
     )
 
     response = ""
-    for chunk in Inference(run_name=run_name).completion.remote_gen(prompt, sender=sender):
+    for chunk in Inference().completion.remote_gen(prompt, sender=sender):
         response += chunk  # not streaming to avoid mixing with server logs
 
     print(Colors.BLUE, f"👤: {prompt}", Colors.END, sep="")

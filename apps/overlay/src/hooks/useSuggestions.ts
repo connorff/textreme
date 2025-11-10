@@ -60,15 +60,15 @@ export const useSuggestions = (
       setSuggestions([]);
     }
 
-    const timeoutId = setTimeout(
-      async () => {
-        try {
-          // Convert messages to the format expected by the API
-          const messageContext = messages.map((msg) => ({
-            text: msg.text,
-            isFromMe: msg.isFromMe,
-            contactName: msg.contactName,
-          }));
+    const timeoutId = setTimeout(async () => {
+      try {
+        // Convert messages to the format expected by the API
+        const messageContext = messages.map((msg) => ({
+          text: msg.text,
+          isFromMe: msg.isFromMe,
+          contactName: msg.contactName,
+          date: msg.date,
+        }));
 
           // Get contact name and identifier from focused conversation
           const displayName =

@@ -131,7 +131,6 @@ export const predict_recipient_responses = tool({
   }): Promise<AgentOutput> {
     const DEBUG = process.env.TEXTREME_AGENT_DEBUG === "1";
     predictToolInvocations += 1;
-
     if (DEBUG) {
       console.log(
         `[tools] predict_recipient_responses called (count=${predictToolInvocations})`
@@ -148,7 +147,6 @@ export const predict_recipient_responses = tool({
       // Predict response for each candidate
       for (let i = 0; i < candidates.length; i++) {
         const candidate = candidates[i];
-
         const prompt = [
           `You are predicting how ${name} would respond to a message.`,
           "",

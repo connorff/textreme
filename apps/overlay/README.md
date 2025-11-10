@@ -10,13 +10,14 @@ export OPENAI_API_KEY=sk-...
 
 ### Modal Model Configuration (Autocomplete)
 
-The autocomplete feature uses a custom Modal endpoint. Configure the model run name:
+The autocomplete feature uses a custom Modal endpoint. Deploy the Modal inference server with:
 
 ```bash
-export TEXTREME_MODEL_RUN_NAME=textreme-2025-11-09-14-13-20-fe40
+cd ml
+modal deploy -m deploy.inference_vllm --env MODAL_RUN_NAME=textreme-2025-11-09-14-13-20-fe40
 ```
 
-You can also create an `.env` in `apps/overlay/` if your shell loads it.
+The model checkpoint is configured at deployment time via the `MODAL_RUN_NAME` environment variable.
 
 ## Demo script
 

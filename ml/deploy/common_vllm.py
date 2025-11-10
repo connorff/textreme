@@ -3,7 +3,7 @@ from typing import Union
 
 import modal
 
-APP_NAME = "textreme"
+APP_NAME = "textreme-no-tags"
 
 MINUTES = 60  # seconds
 HOURS = 60 * MINUTES

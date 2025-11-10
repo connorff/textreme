@@ -99,19 +99,23 @@ export async function runAgentStream(input: string, context: AgentContext) {
     
     // Build a minimal prompt for maximum speed
     const name = context.contactName ?? "Recipient";
-    // Use only last 3 messages for faster processing
-    const lastMessages = context.conversation.slice(-3);
+    // Use last 30 messages for context (same as training)
+    const lastMessages = context.conversation.slice(-30);
+    
+    // Format in exact training format: "{sender}: {content}"
     const conversationContext = lastMessages
-      .map((m) => `${m.isFromMe ? "You" : name}: ${m.text || "[No text]"}`)
+      .map((m) => {
+        const sender = m.isFromMe ? "ME" : name;
+        const text = m.text || "";
+        // Escape newlines for JSONL format
+        const escapedText = text.replace(/\n/g, '\\n');
+        return `${sender}: ${escapedText}`;
+      })
       .join("\n");
     
-    // Ultra-minimal prompt for fastest generation
-    const constructionPrompt = `Conversation:
-${conversationContext}
-
-Request: ${input}
-
-Generate 4 short, lowercase replies (no emojis, no em-dashes). Vary tone.`;
+    // Use the conversation context directly as the construction prompt
+    // OpenAI will generate the next message from "ME"
+    const constructionPrompt = conversationContext;
 
     // Directly call the tools
     const { construct_final_response, predict_recipient_responses } = await import("./tools");

@@ -10,9 +10,16 @@ export interface AgentContext {
 
 export function buildInstructions(ctx: AgentContext) {
   const name = ctx.contactName ?? "Recipient";
+  // Format in exact training format: "{sender}: {content}"
   const transcript = ctx.conversation
     .slice(-30)
-    .map((m) => `${m.isFromMe ? "You" : name}: ${m.text || "[No text]"}`)
+    .map((m) => {
+      const sender = m.isFromMe ? "ME" : name;
+      const text = m.text || "";
+      // Escape newlines for JSONL format
+      const escapedText = text.replace(/\n/g, '\\n');
+      return `${sender}: ${escapedText}`;
+    })
     .join("\n");
 
   return [
@@ -30,14 +37,9 @@ export function buildInstructions(ctx: AgentContext) {
     "",
     "PROCESS:",
     "1. Analyze the conversation context and the user's request",
-    "2. Call `construct_final_response` with a detailed construction prompt to generate 4 candidate replies",
+    "2. Call `construct_final_response` with the conversation history in training format to generate 4 candidate replies",
     "3. After receiving the candidates, call `predict_recipient_responses` to predict how the recipient would respond to each option",
-    "4. Your construction prompt should specify:",
-    "   - What the last message said",
-    "   - The relationship/vibe between users",
-    "   - The tone and style to match",
-    "   - What kind of replies to generate (diverse options)",
-    "   - IMPORTANT: Remind to exclude emojis, em-dashes, and use all lowercase. Use periods only in the middle of a paragraph but never at the end",
+    "4. The conversation history is already formatted in training format (index, sender, [text], content)",
     "",
     "Recent conversation:",
     transcript,

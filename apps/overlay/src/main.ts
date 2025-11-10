@@ -1537,11 +1537,7 @@ ipcMain.handle(
  * Generate text completions using custom Modal endpoint
  */
 async function generateCompletionsWithModal(
-  lastMessages: Array<{
-    text: string | null;
-    isFromMe: boolean;
-    contactName: string | null;
-  }>,
+  lastMessages: Array<{ text: string | null; isFromMe: boolean; contactName: string | null; date: number }>,
   draft: string,
   displayName: string | null,
   chatIdentifier: string
@@ -1559,30 +1555,53 @@ async function generateCompletionsWithModal(
     // Fallback to chatIdentifier itself (phone number or email)
     contactName = chatIdentifier;
   }
+  
+  // Filter messages by 12-hour gap (same as extract_training_pairs.py line 509-512)
+  const CONVERSATION_GAP_HOURS = 12;
+  const filteredMessages: typeof lastMessages = [];
+  
+  if (lastMessages.length > 0) {
+    const mostRecentDate = lastMessages[lastMessages.length - 1].date;
+    
+    // Walk backward from most recent, stop when we hit a 12-hour gap
+    for (let i = lastMessages.length - 1; i >= 0; i--) {
+      const msg = lastMessages[i];
+      const timeGapSeconds = (mostRecentDate - msg.date) / 1_000_000_000;
+      const timeGapHours = timeGapSeconds / 3600;
+      
+      if (timeGapHours > CONVERSATION_GAP_HOURS) {
+        break; // stop including older messages
+      }
+      
+      filteredMessages.unshift(msg);
+    }
+  }
+  
+  if (filteredMessages.length < lastMessages.length) {
+    console.log(`Filtered ${lastMessages.length - filteredMessages.length} messages older than ${CONVERSATION_GAP_HOURS}h (kept ${filteredMessages.length})`);
+  }
+  
+  // Format messages in training format: "{sender}: {content}"
+  const formattedMessages = filteredMessages
+    .map((msg) => {
+      const sender = msg.isFromMe ? "ME" : contactName;
+      const text = msg.text || "";
+      // Escape newlines for JSONL format (same as extract_training_pairs.py line 549)
+      const escapedText = text.replace(/\n/g, '\\n');
+      return `${sender}: ${escapedText}`;
+    });
 
-  // Format messages in training format: "{index} {sender}: [text] {content}"
-  const formattedMessages = lastMessages.map((msg, idx) => {
-    const sender = msg.isFromMe ? "ME" : contactName;
-    const text = msg.text || "";
-    // Escape newlines for JSONL format (same as extract_training_pairs.py line 577)
-    const escapedText = text.replace(/\n/g, "\\n");
-    return `${idx} ${sender}: [text] ${escapedText}`;
-  });
-
-  const input = formattedMessages.join("\n");
-
-  // Always include the [text] prefix, with draft content if it exists
-  const partialResponse = `[text] ${draft}`;
+  const input = formattedMessages.join('\n');
+  
+  // Prepare partial response if draft exists
+  const partialResponse = draft ? `ME: ${draft}` : undefined;
 
   // Modal endpoint configuration
-  const MODAL_ENDPOINT =
-    "https://connorff--textreme-inference-web-dev.modal.run";
-  const RUN_NAME =
-    process.env.TEXTREME_MODEL_RUN_NAME || "textreme-2025-11-09-14-13-20-fe40";
-  const TEMPERATURES = [0.4, 0.7, 1.0];
+  const MODAL_ENDPOINT = "https://connorff--textreme-no-tags-inference-web-dev.modal.run";
+  // Use different temperatures for varied suggestions
+  const TEMPERATURES = [0.2, 0.5, 0.9];
 
   console.log("Request parameters:", {
-    run_name: RUN_NAME,
     sender: "ME",
     input: input,
     partial_response: partialResponse,
@@ -1593,12 +1612,15 @@ async function generateCompletionsWithModal(
     // Make three parallel requests with different temperatures
     const requests = TEMPERATURES.map(async (temperature) => {
       const params = new URLSearchParams({
-        run_name: RUN_NAME,
         temperature: temperature.toString(),
         sender: "ME",
         input: input,
-        partial_response: partialResponse,
       });
+
+      // Only add partial_response if it's defined
+      if (partialResponse) {
+        params.append('partial_response', partialResponse);
+      }
 
       const url = `${MODAL_ENDPOINT}?${params.toString()}`;
 
@@ -1616,41 +1638,74 @@ async function generateCompletionsWithModal(
       }
 
       const text = await response.text();
-
-      // Parse response: should be in format "[text] {content}"
-      const match = text.match(/\[text\]\s*(.*?)(?:%|$)/);
-      if (match && match[1]) {
-        return match[1].trim();
-      }
-
-      // Fallback: return the whole response if parsing fails
-      return text.trim();
+      
+      console.log(`Response (T=${temperature}):`, text);
+      
+      // For partial completions, the model returns the continuation as the first line
+      // (with "ME: " prefix), followed by optional additional messages (with "ME: " prefix)
+      // We only want the first line which completes the partial draft
+      const lines = text.split('\n');
+      const firstLine = lines[0].replace(/%$/, '').trim();
+      
+      // Extract content after "ME: " prefix
+      const match = firstLine.match(/^ME:\s*(.+)$/);
+      const completion = match ? match[1].trim() : firstLine;
+      
+      console.log(`Parsed completion (T=${temperature}):`, completion);
+      return completion;
     });
 
     const completions = await Promise.all(requests);
-
-    // Clean up suggestions and handle multiple messages (conjugates)
-    return completions.map((completion) => {
-      let cleaned = completion;
-      // Strip leading "[text]" prefix (case-insensitive)
-      cleaned = cleaned.replace(/^\[text\]\s*/i, "");
-
-      // Check if there are multiple "ME:" messages - this creates a conjugate suggestion
-      const meMessages = cleaned.split(/\bME:\s*/i).filter((msg) => msg.trim());
-
-      if (meMessages.length > 1) {
-        // Multiple messages - join with special separator for frontend to handle
-        return meMessages.map((msg) => msg.trim()).join("|||");
-      } else {
-        // Single message - just clean it up
-        cleaned = cleaned.replace(/^ME:\s*/i, "");
-        return cleaned.trim();
-      }
-    });
+    
+    // Deduplicate and filter similar completions
+    const uniqueCompletions = deduplicateCompletions(completions);
+    
+    return uniqueCompletions;
   } catch (error) {
     console.error("Modal API error:", error);
     throw error;
   }
+}
+
+/**
+ * Deduplicate completions and filter out very similar ones
+ * Returns up to 3 diverse completions
+ */
+function deduplicateCompletions(completions: string[]): string[] {
+  if (completions.length === 0) return completions;
+  
+  const unique: string[] = [];
+  
+  for (const completion of completions) {
+    const normalized = completion.toLowerCase().trim();
+    
+    // Check if this completion is too similar to any we've already added
+    const isSimilar = unique.some(existing => {
+      const existingNormalized = existing.toLowerCase().trim();
+      
+      // Exact match
+      if (normalized === existingNormalized) return true;
+      
+      // Calculate similarity using simple word overlap
+      const words1 = new Set(normalized.split(/\s+/));
+      const words2 = new Set(existingNormalized.split(/\s+/));
+      
+      const intersection = new Set([...words1].filter(w => words2.has(w)));
+      const union = new Set([...words1, ...words2]);
+      
+      // Jaccard similarity > 0.8 means very similar
+      const similarity = intersection.size / union.size;
+      return similarity > 0.8;
+    });
+    
+    if (!isSimilar) {
+      unique.push(completion);
+    }
+  }
+  
+  // If we filtered too many, return the original completions
+  // (better to show duplicates than nothing)
+  return unique.length > 0 ? unique : completions;
 }
 
 // IPC handler for generating autocomplete suggestions with messages from UI
@@ -1658,11 +1713,7 @@ ipcMain.handle(
   "generate-completions",
   async (
     _event,
-    messages: Array<{
-      text: string | null;
-      isFromMe: boolean;
-      contactName: string | null;
-    }>,
+    messages: Array<{ text: string | null; isFromMe: boolean; contactName: string | null; date: number }>,
     draft: string,
     displayName: string | null,
     chatIdentifier: string
