@@ -4,6 +4,7 @@ AI-powered iMessage response generation using fine-tuned models and agentic work
 
 ## Video Demo 
 
+[Demo Video](apps/overlay/src/assets/finaldemo.mp4)
 Link: https://screen.studio/share/72wVyGXE?state=uploading
 
 ### Product
