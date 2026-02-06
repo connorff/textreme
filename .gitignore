@@ -23,4 +23,11 @@ apps/overlay/.vite/
 ml/data/config.json
 ml/data/dataset.jsonl
 
+# Sensitive message data
+ml/memory/
+ml/data/*.json
+ml/data/*.jsonl
+*messages*.json
+*snapshots*.json
+
 __pycache__/
